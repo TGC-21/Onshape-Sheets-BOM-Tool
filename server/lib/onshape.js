@@ -98,7 +98,9 @@ export async function checkOnshapeAuth() {
 
 export async function getOnshapeAccountScope() {
   const session = await onshapeGet('/users/session')
-  const rawOrganizations = session?.organizations ?? session?.companies ?? session?.memberships ?? []
+  let companyData = null
+  try { companyData = await onshapeGet('/companies') } catch (err) { console.warn('[onshape] could not load company memberships:', err.message) }
+  const rawOrganizations = companyData?.items ?? companyData?.companies ?? companyData ?? session?.organizations ?? session?.companies ?? session?.memberships ?? []
   const organizations = (Array.isArray(rawOrganizations) ? rawOrganizations : [rawOrganizations])
     .filter(Boolean).map((org) => ({ id: org.id, name: org.name, type: org.type || org.kind || 'organization' })).filter((org) => org.id)
   return { user: { id: session?.id ?? null, name: session?.name ?? null }, organizations }
