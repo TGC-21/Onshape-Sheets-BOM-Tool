@@ -1,0 +1,22 @@
+{
+  "name": "onshape-bom-sheets",
+  "version": "0.1.0",
+  "description": "Imports and syncs an Onshape assembly BOM into a Google Sheet.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "dotenv": "^16.4.5",
+    "google-auth-library": "^9.14.2",
+    "googleapis": "^144.0.0",
+    "hono": "^4.6.9",
+    "pg": "^8.13.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

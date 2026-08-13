@@ -1,0 +1,253 @@
+<!doctype html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root{
+    --ink:#1b2430;
+    --sub:#5b6b7c;
+    --line:#dde3e9;
+    --line-soft:#eaeef2;
+    --surface:#ffffff;
+    --bg:#f6f8fa;
+    --accent:#0f6b5c;
+    --accent-dark:#0b5348;
+    --accent-soft:#e7f3f0;
+    --danger:#b3261e;
+    --danger-soft:#fbeceb;
+    --radius:8px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    padding:16px;
+    background:var(--bg);
+    color:var(--ink);
+    font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  }
+  h3{
+    margin:0 0 2px;
+    font-size:15px;
+    font-weight:650;
+    letter-spacing:-.01em;
+  }
+  .subtitle{
+    margin:0 0 16px;
+    color:var(--sub);
+    font-size:12px;
+  }
+  .field-label{
+    display:block;
+    font-size:11px;
+    font-weight:600;
+    letter-spacing:.02em;
+    text-transform:uppercase;
+    color:var(--sub);
+    margin:0 0 6px;
+  }
+  .search-row{
+    display:flex;
+    gap:8px;
+    margin-bottom:4px;
+  }
+  input, select{
+    width:100%;
+    padding:8px 10px;
+    font:inherit;
+    color:var(--ink);
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    outline:none;
+    transition:border-color .12s ease, box-shadow .12s ease;
+  }
+  input:focus, select:focus{
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px var(--accent-soft);
+  }
+  select:disabled, button:disabled{
+    opacity:.5;
+    cursor:not-allowed;
+  }
+  .search-row input{flex:1}
+  button{
+    font:inherit;
+    font-weight:600;
+    padding:8px 14px;
+    border:1px solid transparent;
+    border-radius:var(--radius);
+    cursor:pointer;
+    white-space:nowrap;
+    transition:background .12s ease, border-color .12s ease, transform .05s ease;
+  }
+  button:active:not(:disabled){transform:translateY(1px)}
+  .btn-primary{
+    background:var(--accent);
+    color:#fff;
+  }
+  .btn-primary:hover:not(:disabled){background:var(--accent-dark)}
+  .btn-full{width:100%;margin-top:4px}
+  .section{margin-top:18px}
+  .results{
+    max-height:180px;
+    overflow-y:auto;
+    border:1px solid var(--line-soft);
+    border-radius:var(--radius);
+    margin:8px 0;
+    background:var(--surface);
+  }
+  .results:empty{display:none}
+  .result{
+    padding:9px 10px;
+    font-size:13px;
+    border-bottom:1px solid var(--line-soft);
+    cursor:pointer;
+    transition:background .1s ease;
+  }
+  .result:last-child{border-bottom:none}
+  .result:hover{background:var(--bg)}
+  .result.selected{
+    background:var(--accent-soft);
+    color:var(--accent-dark);
+    font-weight:600;
+  }
+  .hint{
+    font-size:11.5px;
+    color:var(--sub);
+    margin:6px 0 0;
+  }
+  #status{
+    margin-top:14px;
+    padding:10px 12px;
+    border-radius:var(--radius);
+    font-size:12.5px;
+    color:var(--sub);
+    background:var(--surface);
+    border:1px solid var(--line-soft);
+    white-space:pre-wrap;
+    min-height:14px;
+  }
+  #status.status-error{
+    color:var(--danger);
+    background:var(--danger-soft);
+    border-color:#f2c9c6;
+  }
+  #status.status-busy{color:var(--accent-dark)}
+  #status.status-ok{color:var(--accent-dark);background:var(--accent-soft);border-color:#c9e3dc}
+  #status:empty{display:none}
+  .spinner{
+    display:inline-block;
+    width:11px;height:11px;
+    border:2px solid var(--accent-soft);
+    border-top-color:var(--accent);
+    border-radius:50%;
+    animation:spin .7s linear infinite;
+    margin-right:6px;
+    vertical-align:-1px;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+  <h3>Import Onshape BOM</h3>
+  <p class="subtitle">Search a document, pick an assembly, import into this tab.</p>
+
+  <span class="field-label">Document</span>
+  <div class="search-row">
+    <input id="query" placeholder="Document name…">
+    <button class="btn-primary" onclick="search()">Search</button>
+  </div>
+  <div class="results" id="documents"></div>
+
+  <div class="section">
+    <span class="field-label">Assembly</span>
+    <select id="assembly" disabled>
+      <option>Select a document first</option>
+    </select>
+  </div>
+
+  <button class="btn-primary btn-full" onclick="importBom()" id="import" disabled>Import into this tab</button>
+  <p class="hint">Re-running this later syncs Onshape-owned columns and leaves your own columns untouched.</p>
+
+  <div id="status"></div>
+
+<script>
+let selected;
+
+function setStatus(text, kind){
+  const el = document.getElementById('status');
+  el.className = kind ? 'status-' + kind : '';
+  el.textContent = text || '';
+}
+function busy(text){ setStatus(text, 'busy'); }
+function fail(e){ setStatus('Error: ' + (e.message || e), 'error'); }
+
+function search(){
+  const q = document.getElementById('query').value;
+  busy('Searching…');
+  google.script.run.withSuccessHandler(showDocuments).withFailureHandler(fail).searchDocuments(q, 25);
+}
+
+function showDocuments(data){
+  const list = data.documents || data || [];
+  const box = document.getElementById('documents');
+  box.innerHTML = '';
+  list.forEach(d => {
+    const row = document.createElement('div');
+    row.className = 'result';
+    row.textContent = d.name || d.id;
+    row.onclick = () => pick(d, row);
+    box.appendChild(row);
+  });
+  setStatus(list.length ? (list.length + ' document(s) found — pick one.') : 'No documents matched.');
+}
+
+function pick(d, node){
+  document.querySelectorAll('.result').forEach(x => x.classList.remove('selected'));
+  node.classList.add('selected');
+  selected = { documentId: d.id, workspaceId: d.workspaceId || d.defaultWorkspaceId };
+  document.getElementById('assembly').disabled = true;
+  document.getElementById('import').disabled = true;
+  busy('Loading assemblies…');
+  google.script.run.withSuccessHandler(showAssemblies).withFailureHandler(fail)
+    .listAssemblies(selected.documentId, selected.workspaceId);
+}
+
+function showAssemblies(data){
+  const list = data.assemblies || data || [];
+  const el = document.getElementById('assembly');
+  el.innerHTML = '<option value="">Select an assembly</option>';
+  list.forEach(x => {
+    const o = document.createElement('option');
+    o.value = x.id;
+    o.textContent = x.name || x.id;
+    el.appendChild(o);
+  });
+  el.disabled = false;
+  document.getElementById('import').disabled = false;
+  setStatus(list.length ? 'Select an assembly.' : 'No assembly elements found in this document.');
+}
+
+function importBom(){
+  const assemblyId = document.getElementById('assembly').value;
+  if (!selected || !assemblyId) return setStatus('Select an assembly first.', 'error');
+  selected.elementId = assemblyId;
+  document.getElementById('import').disabled = true;
+  busy('Importing…');
+  google.script.run
+    .withSuccessHandler(r => {
+      document.getElementById('import').disabled = false;
+      setStatus('Imported ' + (r.partsFound || r.rowsWritten || 0) + ' row(s).', 'ok');
+    })
+    .withFailureHandler(e => { document.getElementById('import').disabled = false; fail(e); })
+    .importBom(selected);
+}
+
+document.getElementById('query').addEventListener('keydown', e => {
+  if (e.key === 'Enter') search();
+});
+</script>
+</body>
+</html>
