@@ -652,6 +652,10 @@ split.
   end users.
 - Config tab for column mapping (originally §5/§7 step 4) — replaces the
   hardcoded `columnMap.js` values, deferred from V1 as agreed.
+- Configuration groundwork for display order and user-owned checkbox/dropdown
+  columns exists in Apps Script. Full backend-driven reordering is deferred
+  until configuration is stored in a location readable by both Apps Script
+  and Node; the fixed V1 layout remains authoritative for import/sync.
 - Optional: scheduled sync (cron-triggered endpoint on the VM, or an
   Apps Script time-driven trigger calling `Sync now` automatically).
 - Error surfacing polish in the sidebar (e.g. distinguishing "no access",

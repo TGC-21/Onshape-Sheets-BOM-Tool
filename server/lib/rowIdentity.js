@@ -27,8 +27,10 @@ export function annotateWithSourceKeys(rows) {
   const keyByRowId = new Map(rows.map((r) => [r.rowId, buildSourceKey(r.ref) ?? `fallback::${r.rowId}`]))
   return rows.map((r) => {
     const sourceKey = keyByRowId.get(r.rowId)
-    const parentSourceKey = r.parentRowId ? keyByRowId.get(r.parentRowId) : null
+    const parent = r.parentRowId ? rows.find((candidate) => candidate.rowId === r.parentRowId) : null
+    const parentSourceKey = parent ? keyByRowId.get(parent.rowId) : null
+    const parentLabel = parent ? `${parent.partName}${parent.partNumber ? ` (${parent.partNumber})` : ''}` : ''
     const hash = contentHash([r.partName, r.partNumber, r.quantity, r.level, parentSourceKey])
-    return { ...r, sourceKey, parentSourceKey, contentHash: hash }
+    return { ...r, sourceKey, parentSourceKey, parentLabel, contentHash: hash }
   })
 }

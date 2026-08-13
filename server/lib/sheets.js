@@ -241,7 +241,7 @@ export async function writeHierarchyBom(spreadsheetId, rows, { sheetName } = {})
     row[partNumberIdx] = r.partNumber
     row[quantityIdx] = r.quantity
     row[levelIdx] = r.level
-    row[parentIdx] = r.parentSourceKey ?? ''
+    row[parentIdx] = r.parentLabel ?? ''
     row[sourceKeyIdx] = r.sourceKey ?? ''
     row[contentHashIdx] = r.contentHash ?? ''
     const v = r.vendorListing
@@ -305,7 +305,7 @@ export async function syncHierarchyBom(spreadsheetId, rows, { sheetName } = {}) 
   const urlCol = columnLetterToIndex(VENDOR_COLUMNS.purchaseUrl) - 1
   const priceCol = columnLetterToIndex(VENDOR_COLUMNS.price) - 1
   const availabilityCol = columnLetterToIndex(VENDOR_COLUMNS.availability) - 1
-  const cellsFor = (r) => { const v=r.vendorListing; return [[r.isSubassembly ? `${r.partName} (assembly)` : r.partName, r.partNumber, r.quantity, r.level, r.parentSourceKey ?? '', r.sourceKey, r.contentHash, v?.vendorName ?? '', v?.vendorPartNumber ?? '', v?.purchaseUrl ?? '', v?.latestPrice ?? '', v?.availability ?? '', v?.id ?? '', r.vendorSnapshot ?? '']] }
+  const cellsFor = (r) => { const v=r.vendorListing; return [[r.isSubassembly ? `${r.partName} (assembly)` : r.partName, r.partNumber, r.quantity, r.level, r.parentLabel ?? '', r.sourceKey, r.contentHash, v?.vendorName ?? '', v?.vendorPartNumber ?? '', v?.purchaseUrl ?? '', v?.latestPrice ?? '', v?.availability ?? '', v?.id ?? '', r.vendorSnapshot ?? '']] }
   for (const row of rows) {
     const found = existing.get(row.sourceKey)
     if (!found) inserts.push(row)

@@ -481,7 +481,7 @@ export async function buildHierarchyRows(documentId, workspaceId, elementId, wvm
       const { parts } = parseFlatBomRows(bomData)
       for (const p of parts) {
         rows.push({ ...p, level, parentRowId, rowId: `r${rowCounter++}`, isSubassembly: false,
-          ref: { documentId: docId, wvmType: wvm, wvmId: wsId, elementId: elId, partIdentity: p.partIdentity, partId: p.partId, fullConfiguration: p.fullConfiguration } })
+          ref: p.ref ?? { documentId: docId, wvmType: wvm, wvmId: wsId, elementId: elId } })
       }
       return
     }
@@ -492,7 +492,7 @@ export async function buildHierarchyRows(documentId, workspaceId, elementId, wvm
 
     for (const p of directParts) {
       rows.push({ ...p, level, parentRowId, rowId: `r${rowCounter++}`, isSubassembly: false,
-        ref: { documentId: docId, wvmType: wvm, wvmId: wsId, elementId: elId, partIdentity: p.partIdentity, partId: p.partId, fullConfiguration: p.fullConfiguration } })
+        ref: p.ref ?? { documentId: docId, wvmType: wvm, wvmId: wsId, elementId: elId } })
     }
 
     for (const s of subassemblies) {

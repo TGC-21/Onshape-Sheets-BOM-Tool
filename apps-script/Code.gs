@@ -3,11 +3,24 @@ const BACKEND_URL = 'https://YOUR-BOM-BACKEND.example.com';
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('Onshape BOM')
-    .addItem('Import…', 'showImportSidebar').addItem('Manage vendor listings', 'showVendorCatalog').addItem('Sync now', 'syncNow')
+    .addItem('Import…', 'showImportSidebar').addItem('Manage vendor listings', 'showVendorCatalog').addItem('Configure columns…', 'showColumnConfig').addItem('Sync now', 'syncNow')
     .addToUi();
 }
 function showImportSidebar() { SpreadsheetApp.getUi().showSidebar(HtmlService.createHtmlOutputFromFile('sidebar').setTitle('Onshape BOM Import')); }
 function showVendorCatalog() { SpreadsheetApp.getUi().showSidebar(HtmlService.createHtmlOutputFromFile('vendor-catalog').setTitle('Vendor Listings')); }
+function showColumnConfig() { SpreadsheetApp.getUi().showSidebar(HtmlService.createHtmlOutputFromFile('column-config').setTitle('Configure BOM Columns')); }
+function getColumnConfig() { return JSON.parse(PropertiesService.getDocumentProperties().getProperty('BOM_COLUMN_CONFIG') || '[]'); }
+function saveColumnConfig(config) { PropertiesService.getDocumentProperties().setProperty('BOM_COLUMN_CONFIG', JSON.stringify(config || [])); applyColumnValidation_(); return true; }
+function applyColumnValidation_() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const config = getColumnConfig();
+  config.forEach((column, index) => {
+    if (column.source !== 'user') return;
+    const range = sheet.getRange(2, index + 1, Math.max(sheet.getMaxRows() - 1, 1), 1);
+    if (column.type === 'checkbox') range.insertCheckboxes();
+    if (column.type === 'dropdown' && column.options && column.options.length) range.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(column.options, true).setAllowInvalid(false).build());
+  });
+}
 function getConfiguration() { return { spreadsheetId: SpreadsheetApp.getActive().getId(), sheetName: SpreadsheetApp.getActiveSheet().getName() }; }
 function backendRequest_(method, path, body) {
   const base = BACKEND_URL;

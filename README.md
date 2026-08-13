@@ -76,6 +76,9 @@ stored in hidden columns `Z` and `AA`.
 ## Future work
 
 - Config tab for column mapping.
+- Column configuration groundwork via `Onshape BOM → Configure columns…`.
+  Full backend-driven reordering remains pending until the shared config
+  storage is wired; the current importer retains the fixed V1 layout.
 - Scheduled sync.
 - PostgreSQL-backed COTS vendor catalog. Set `DATABASE_URL` and use
   `Onshape BOM → Manage vendor listings` to maintain grouped parts and
