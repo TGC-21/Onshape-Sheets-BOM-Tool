@@ -83,6 +83,10 @@ stored in hidden columns `Z` and `AA`.
 - PostgreSQL-backed COTS vendor catalog. Set `DATABASE_URL` and use
   `Onshape BOM → Manage vendor listings` to maintain grouped parts and
   vendor options.
+- Set `BACKEND_API_TOKEN` in both `.env` and `apps-script/Code.gs`, then run
+  `installTriggers()` once from Apps Script to enable vendor selection edits.
+- The first Apps Script deployment must authorize the installable trigger;
+  simple `onEdit` is no longer used for vendor changes.
 - PostgreSQL-backed vendor catalog with a `Manage vendor listings` view in
   the Apps Script sidebar. The catalog will support grouped Onshape parts,
   vendor options, cross-references, default options, CSV additive/upsert

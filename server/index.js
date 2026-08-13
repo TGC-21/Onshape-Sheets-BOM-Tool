@@ -18,6 +18,12 @@ import catalogRoute from './routes/catalog.js'
 
 const app = new Hono()
 
+app.use('/api/*', async (c, next) => {
+  const expected = process.env.BACKEND_API_TOKEN
+  if (expected && c.req.header('Authorization') !== `Bearer ${expected}`) return c.json({ error: 'Unauthorized' }, 401)
+  await next()
+})
+
 app.get('/', (c) => c.text('onshape-bom-sheets backend is running'))
 app.route('/api/health', health)
 app.route('/api/onshape', onshapeLookup)

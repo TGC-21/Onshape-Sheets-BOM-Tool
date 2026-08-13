@@ -6,7 +6,8 @@
   "private": true,
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node --watch server/index.js"
+    "dev": "node --watch server/index.js",
+    "test": "node --test"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",

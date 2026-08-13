@@ -754,6 +754,12 @@ The current management UI is an initial operational version. Inline editing,
 listing selection dropdowns, unavailable-listing display, and polished CSV
 file upload remain follow-up improvements within this scope.
 
+The vendor selection implementation now supports batch catalog matching,
+server-side short-lived match caching, per-row vendor dropdowns, and an
+installable Apps Script edit trigger. `In Inventory?` is a user-owned checkbox;
+checking it visually mutes vendor fields while preserving the selected listing
+snapshot. Configure `BACKEND_API_TOKEN` on both sides before deployment.
+
 ### 9.3 Vendor catalog user experience
 
 Vendor listings should be manageable from the existing `Onshape BOM Import`
