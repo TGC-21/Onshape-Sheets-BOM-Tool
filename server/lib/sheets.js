@@ -33,10 +33,7 @@ async function resolveColumnLayout(sheets, spreadsheetId) {
    // Reserve meta columns AFTER whatever the Config tab actually uses,
     // instead of fixed letters (Z/AA/AB/AC) that a wide custom config
     // can grow past and collide with.
-    let next = Math.max(...Object.values(layout), 1) + 1
-    for (const id of ['sourceKey', 'contentHash', 'listingId', 'listingSnapshot']) {
-      if (!layout[id]) layout[id] = next++
-    }
+
     return { layout, labels }
   } catch { return { layout: LEGACY_LAYOUT, labels: null } }
 }
