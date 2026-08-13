@@ -26,4 +26,3 @@ format.post('/', async (c) => {
 })
 
 export default format
-s
