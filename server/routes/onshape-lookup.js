@@ -19,7 +19,7 @@ const onshapeLookup = new Hono()
 
 onshapeLookup.get('/documents', async (c) => {
   const q = (c.req.query('q') || '').trim()
-  const limit = Math.min(parseInt(c.req.query('limit'), 10) || 20, 50)
+  const limit = Math.min(parseInt(c.req.query('limit'), 10) || 20, 20)
   try {
     const params = new URLSearchParams({
       limit: String(limit),
