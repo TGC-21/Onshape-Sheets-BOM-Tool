@@ -25,10 +25,11 @@ async function resolveColumnLayout(sheets, spreadsheetId) {
     if (!Array.isArray(config) || !config.length) return { layout: LEGACY_LAYOUT, labels: null }
     const layout = {}
     const labels = {}
-    config.filter((c) => c.enabled !== false).forEach((c, index) => {
-      layout[c.id] = index + 2
-      labels[c.id] = c.label   // <-- carry the real label through
-    })
+    config.filter((c) => c.enabled !== false).forEach((c, index) => { layout[c.id] = index + 2; labels[c.id] = c.label })
+    let next = Math.max(...Object.values(layout), 1) + 1
+    for (const id of ['sourceKey', 'contentHash', 'listingId', 'listingSnapshot']) {
+      if (!layout[id]) layout[id] = next++
+    }
    // Reserve meta columns AFTER whatever the Config tab actually uses,
     // instead of fixed letters (Z/AA/AB/AC) that a wide custom config
     // can grow past and collide with.
@@ -249,8 +250,7 @@ export async function writeHierarchyBom(spreadsheetId, rows, { sheetName } = {})
   const sheets = await getSheetsClient()
   const title = await resolveSheetTitle(sheets, spreadsheetId, sheetName)
   const sheetId = await getSheetIdByTitle(sheets, spreadsheetId, title)
-  const layout = await resolveColumnLayout(sheets, spreadsheetId)
-
+  const { layout, labels } = await resolveColumnLayout(sheets, spreadsheetId)
   const nameIdx = indexFor(layout, 'name', ONSHAPE_COLUMNS.name) - 1
   const partNumberIdx = indexFor(layout, 'partNumber', ONSHAPE_COLUMNS.partNumber) - 1
   const quantityIdx = indexFor(layout, 'quantity', ONSHAPE_COLUMNS.quantity) - 1
@@ -266,9 +266,10 @@ export async function writeHierarchyBom(spreadsheetId, rows, { sheetName } = {})
   const listingIdIdx = indexFor(layout, 'listingId', META_COLUMNS.listingId) - 1
   const snapshotIdx = indexFor(layout, 'listingSnapshot', META_COLUMNS.listingSnapshot) - 1
   const header = new Array(Math.max(...Object.values(layout), columnLetterToIndex(META_COLUMNS.listingSnapshot))).fill('')
-  const labels = { name: 'Name', partNumber: 'Part Number', quantity: 'Quantity', level: 'Level', parent: 'Parent', vendor: 'Vendor', vendorPartNumber: 'Vendor Part Number', purchaseUrl: 'Purchase URL', price: 'Price', availability: 'Availability', sourceKey: 'Source Key (hidden — do not edit)', contentHash: 'Content Hash (hidden — do not edit)', listingId: 'Listing Id (hidden — do not edit)', listingSnapshot: 'Listing Snapshot (hidden — do not edit)' }
-  Object.entries(labels).forEach(([id, label]) => { const index = indexFor(layout, id, LEGACY_LAYOUT[id]) - 1; if (index >= 0) header[index] = label })
-
+  const metaLabels = { sourceKey: 'Source Key (hidden — do not edit)', contentHash: 'Content Hash (hidden — do not edit)', listingId: 'Listing Id (hidden — do not edit)', listingSnapshot: 'Listing Snapshot (hidden — do not edit)', vendor: 'Vendor', vendorPartNumber: 'Vendor Part Number', purchaseUrl: 'Purchase URL', price: 'Price', availability: 'Availability', name: 'Name', partNumber: 'Part Number', quantity: 'Quantity', level: 'Level', parent: 'Parent' }
+  const effectiveLabels = labels ? { ...metaLabels, ...labels } : metaLabels
+  Object.entries(effectiveLabels).forEach(([id, label]) => { const index = indexFor(layout, id, LEGACY_LAYOUT[id]) - 1; if (index >= 0 && index < header.length) header[index] = label })
+  
   const values = rows.map((r) => {
     const row = new Array(header.length).fill('')
     row[nameIdx] = r.isSubassembly ? `${r.partName} (assembly)` : r.partName
@@ -326,7 +327,7 @@ export async function formatBomSheet(spreadsheetId, { sheetName } = {}) {
   const sheets = await getSheetsClient()
   const title = await resolveSheetTitle(sheets, spreadsheetId, sheetName)
   const sheetId = await getSheetIdByTitle(sheets, spreadsheetId, title)
-  const layout = await resolveColumnLayout(sheets, spreadsheetId)
+  const { layout, labels } = await resolveColumnLayout(sheets, spreadsheetId)
   const maxColumn = Math.max(...Object.values(layout), columnLetterToIndex(META_COLUMNS.listingSnapshot))
 
   const read = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${title}!A:${columnIndexToLetter(maxColumn)}` })
