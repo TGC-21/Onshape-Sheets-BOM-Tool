@@ -11,6 +11,24 @@
 import { google } from 'googleapis'
 import fs from 'node:fs'
 import { buildHeaderRow, columnLetterToIndex, ONSHAPE_COLUMNS, META_COLUMNS, VENDOR_COLUMNS } from './columnMap.js'
+import { DEFAULT_COLUMN_CONFIG } from './columnConfig.js'
+
+const LEGACY_LAYOUT = { name: 'B', partNumber: 'C', quantity: 'D', level: 'E', parent: 'F', priority: 'G', owner: 'H', vendor: 'I', vendorPartNumber: 'J', purchaseUrl: 'K', price: 'L', availability: 'M', sourceKey: 'Z', contentHash: 'AA', listingId: 'AB', listingSnapshot: 'AC' }
+const labelFor = (id, fallback) => DEFAULT_COLUMN_CONFIG.find((c) => c.id === id)?.label || fallback
+
+async function resolveColumnLayout(sheets, spreadsheetId) {
+  try {
+    const result = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Config!A1' })
+    const config = JSON.parse(result.data.values?.[0]?.[0] || '')
+    if (!Array.isArray(config) || !config.length) return LEGACY_LAYOUT
+    const layout = {}
+    config.filter((c) => c.enabled !== false).forEach((c, index) => { layout[c.id] = index + 2 })
+    return layout
+  } catch { return LEGACY_LAYOUT }
+}
+
+function indexFor(layout, id, fallbackLetter) { return layout[id] ?? columnLetterToIndex(fallbackLetter) }
+function columnIndexToLetter(index) { let result=''; while(index>0){const remainder=(index-1)%26;result=String.fromCharCode(65+remainder)+result;index=Math.floor((index-1)/26)} return result }
 
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
@@ -218,22 +236,25 @@ export async function writeHierarchyBom(spreadsheetId, rows, { sheetName } = {})
   const sheets = await getSheetsClient()
   const title = await resolveSheetTitle(sheets, spreadsheetId, sheetName)
   const sheetId = await getSheetIdByTitle(sheets, spreadsheetId, title)
+  const layout = await resolveColumnLayout(sheets, spreadsheetId)
 
-  const header = buildHeaderRow()
-  const nameIdx = columnLetterToIndex(ONSHAPE_COLUMNS.name) - 1
-  const partNumberIdx = columnLetterToIndex(ONSHAPE_COLUMNS.partNumber) - 1
-  const quantityIdx = columnLetterToIndex(ONSHAPE_COLUMNS.quantity) - 1
-  const levelIdx = columnLetterToIndex(ONSHAPE_COLUMNS.level) - 1
-  const parentIdx = columnLetterToIndex(ONSHAPE_COLUMNS.parent) - 1
-  const sourceKeyIdx = columnLetterToIndex(META_COLUMNS.sourceKey) - 1
-  const contentHashIdx = columnLetterToIndex(META_COLUMNS.contentHash) - 1
-  const vendorIdx = columnLetterToIndex(VENDOR_COLUMNS.vendor) - 1
-  const vendorPnIdx = columnLetterToIndex(VENDOR_COLUMNS.vendorPartNumber) - 1
-  const urlIdx = columnLetterToIndex(VENDOR_COLUMNS.purchaseUrl) - 1
-  const priceIdx = columnLetterToIndex(VENDOR_COLUMNS.price) - 1
-  const availabilityIdx = columnLetterToIndex(VENDOR_COLUMNS.availability) - 1
-  const listingIdIdx = columnLetterToIndex(META_COLUMNS.listingId) - 1
-  const snapshotIdx = columnLetterToIndex(META_COLUMNS.listingSnapshot) - 1
+  const nameIdx = indexFor(layout, 'name', ONSHAPE_COLUMNS.name) - 1
+  const partNumberIdx = indexFor(layout, 'partNumber', ONSHAPE_COLUMNS.partNumber) - 1
+  const quantityIdx = indexFor(layout, 'quantity', ONSHAPE_COLUMNS.quantity) - 1
+  const levelIdx = indexFor(layout, 'level', ONSHAPE_COLUMNS.level) - 1
+  const parentIdx = indexFor(layout, 'parent', ONSHAPE_COLUMNS.parent) - 1
+  const sourceKeyIdx = indexFor(layout, 'sourceKey', META_COLUMNS.sourceKey) - 1
+  const contentHashIdx = indexFor(layout, 'contentHash', META_COLUMNS.contentHash) - 1
+  const vendorIdx = indexFor(layout, 'vendor', VENDOR_COLUMNS.vendor) - 1
+  const vendorPnIdx = indexFor(layout, 'vendorPartNumber', VENDOR_COLUMNS.vendorPartNumber) - 1
+  const urlIdx = indexFor(layout, 'purchaseUrl', VENDOR_COLUMNS.purchaseUrl) - 1
+  const priceIdx = indexFor(layout, 'price', VENDOR_COLUMNS.price) - 1
+  const availabilityIdx = indexFor(layout, 'availability', VENDOR_COLUMNS.availability) - 1
+  const listingIdIdx = indexFor(layout, 'listingId', META_COLUMNS.listingId) - 1
+  const snapshotIdx = indexFor(layout, 'listingSnapshot', META_COLUMNS.listingSnapshot) - 1
+  const header = new Array(Math.max(...Object.values(layout), columnLetterToIndex(META_COLUMNS.listingSnapshot))).fill('')
+  const labels = { name: 'Name', partNumber: 'Part Number', quantity: 'Quantity', level: 'Level', parent: 'Parent', vendor: 'Vendor', vendorPartNumber: 'Vendor Part Number', purchaseUrl: 'Purchase URL', price: 'Price', availability: 'Availability', sourceKey: 'Source Key (hidden — do not edit)', contentHash: 'Content Hash (hidden — do not edit)', listingId: 'Listing Id (hidden — do not edit)', listingSnapshot: 'Listing Snapshot (hidden — do not edit)' }
+  Object.entries(labels).forEach(([id, label]) => { const index = indexFor(layout, id, LEGACY_LAYOUT[id]) - 1; if (index >= 0) header[index] = label })
 
   const values = rows.map((r) => {
     const row = new Array(header.length).fill('')
@@ -281,30 +302,32 @@ export async function syncHierarchyBom(spreadsheetId, rows, { sheetName } = {}) 
   const sheets = await getSheetsClient()
   const title = await resolveSheetTitle(sheets, spreadsheetId, sheetName)
   const sheetId = await getSheetIdByTitle(sheets, spreadsheetId, title)
-  const read = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${title}!A:AA` })
+  const layout = await resolveColumnLayout(sheets, spreadsheetId)
+  const maxColumn = Math.max(...Object.values(layout), columnLetterToIndex(META_COLUMNS.listingSnapshot))
+  const read = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${title}!A:${columnIndexToLetter(maxColumn)}` })
   const values = read.data.values ?? []
   const existing = new Map()
   for (let i = 1; i < values.length; i++) {
-    const key = values[i][columnLetterToIndex(META_COLUMNS.sourceKey) - 1]
+    const key = values[i][indexFor(layout, 'sourceKey', META_COLUMNS.sourceKey) - 1]
     if (key) existing.set(key, { rowNumber: i + 1, values: values[i] })
   }
   const updates = []
   const inserts = []
   const freshKeys = new Set(rows.map((r) => r.sourceKey))
-  const nameCol = columnLetterToIndex(ONSHAPE_COLUMNS.name) - 1
-  const pnCol = columnLetterToIndex(ONSHAPE_COLUMNS.partNumber) - 1
-  const qtyCol = columnLetterToIndex(ONSHAPE_COLUMNS.quantity) - 1
-  const levelCol = columnLetterToIndex(ONSHAPE_COLUMNS.level) - 1
-  const parentCol = columnLetterToIndex(ONSHAPE_COLUMNS.parent) - 1
-  const sourceCol = columnLetterToIndex(META_COLUMNS.sourceKey) - 1
-  const hashCol = columnLetterToIndex(META_COLUMNS.contentHash) - 1
-  const listingIdCol = columnLetterToIndex(META_COLUMNS.listingId) - 1
-  const snapshotCol = columnLetterToIndex(META_COLUMNS.listingSnapshot) - 1
-  const vendorCol = columnLetterToIndex(VENDOR_COLUMNS.vendor) - 1
-  const vendorPnCol = columnLetterToIndex(VENDOR_COLUMNS.vendorPartNumber) - 1
-  const urlCol = columnLetterToIndex(VENDOR_COLUMNS.purchaseUrl) - 1
-  const priceCol = columnLetterToIndex(VENDOR_COLUMNS.price) - 1
-  const availabilityCol = columnLetterToIndex(VENDOR_COLUMNS.availability) - 1
+  const nameCol = indexFor(layout, 'name', ONSHAPE_COLUMNS.name) - 1
+  const pnCol = indexFor(layout, 'partNumber', ONSHAPE_COLUMNS.partNumber) - 1
+  const qtyCol = indexFor(layout, 'quantity', ONSHAPE_COLUMNS.quantity) - 1
+  const levelCol = indexFor(layout, 'level', ONSHAPE_COLUMNS.level) - 1
+  const parentCol = indexFor(layout, 'parent', ONSHAPE_COLUMNS.parent) - 1
+  const sourceCol = indexFor(layout, 'sourceKey', META_COLUMNS.sourceKey) - 1
+  const hashCol = indexFor(layout, 'contentHash', META_COLUMNS.contentHash) - 1
+  const listingIdCol = indexFor(layout, 'listingId', META_COLUMNS.listingId) - 1
+  const snapshotCol = indexFor(layout, 'listingSnapshot', META_COLUMNS.listingSnapshot) - 1
+  const vendorCol = indexFor(layout, 'vendor', VENDOR_COLUMNS.vendor) - 1
+  const vendorPnCol = indexFor(layout, 'vendorPartNumber', VENDOR_COLUMNS.vendorPartNumber) - 1
+  const urlCol = indexFor(layout, 'purchaseUrl', VENDOR_COLUMNS.purchaseUrl) - 1
+  const priceCol = indexFor(layout, 'price', VENDOR_COLUMNS.price) - 1
+  const availabilityCol = indexFor(layout, 'availability', VENDOR_COLUMNS.availability) - 1
   const cellsFor = (r) => { const v=r.vendorListing; return [[r.isSubassembly ? `${r.partName} (assembly)` : r.partName, r.partNumber, r.quantity, r.level, r.parentLabel ?? '', r.sourceKey, r.contentHash, v?.vendorName ?? '', v?.vendorPartNumber ?? '', v?.purchaseUrl ?? '', v?.latestPrice ?? '', v?.availability ?? '', v?.id ?? '', r.vendorSnapshot ?? '']] }
   for (const row of rows) {
     const found = existing.get(row.sourceKey)
@@ -312,13 +335,13 @@ export async function syncHierarchyBom(spreadsheetId, rows, { sheetName } = {}) 
     else if (found.values[hashCol] !== row.contentHash) {
       const parts = cellsFor(row)[0]
       updates.push(...[
-        [`${title}!${ONSHAPE_COLUMNS.name}${found.rowNumber}` , [[parts[0]]]],
-        [`${title}!${ONSHAPE_COLUMNS.partNumber}${found.rowNumber}`, [[parts[1]]]],
-        [`${title}!${ONSHAPE_COLUMNS.quantity}${found.rowNumber}`, [[parts[2]]]],
-        [`${title}!${ONSHAPE_COLUMNS.level}${found.rowNumber}`, [[parts[3]]]],
-        [`${title}!${ONSHAPE_COLUMNS.parent}${found.rowNumber}`, [[parts[4]]]],
-        [`${title}!${META_COLUMNS.sourceKey}${found.rowNumber}`, [[parts[5]]]],
-        [`${title}!${META_COLUMNS.contentHash}${found.rowNumber}`, [[parts[6]]]],
+        [`${title}!${columnIndexToLetter(nameCol + 1)}${found.rowNumber}` , [[parts[0]]]],
+        [`${title}!${columnIndexToLetter(pnCol + 1)}${found.rowNumber}`, [[parts[1]]]],
+        [`${title}!${columnIndexToLetter(qtyCol + 1)}${found.rowNumber}`, [[parts[2]]]],
+        [`${title}!${columnIndexToLetter(levelCol + 1)}${found.rowNumber}`, [[parts[3]]]],
+        [`${title}!${columnIndexToLetter(parentCol + 1)}${found.rowNumber}`, [[parts[4]]]],
+        [`${title}!${columnIndexToLetter(sourceCol + 1)}${found.rowNumber}`, [[parts[5]]]],
+        [`${title}!${columnIndexToLetter(hashCol + 1)}${found.rowNumber}`, [[parts[6]]]],
       ])
     }
   }

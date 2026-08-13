@@ -13,9 +13,14 @@
 // Phase 2 (flat import) and Phase 3 (subassembly recursion), not Phase 1.
 
 import { Hono } from 'hono'
-import { onshapeGet } from '../lib/onshape.js'
+import { getOnshapeAccountScope, onshapeGet } from '../lib/onshape.js'
 
 const onshapeLookup = new Hono()
+
+onshapeLookup.get('/account-scope', async (c) => {
+  try { return c.json(await getOnshapeAccountScope()) }
+  catch (err) { return c.json({ error: err.message ?? 'Could not determine Onshape account scope.' }, 500) }
+})
 
 onshapeLookup.get('/documents', async (c) => {
   const q = (c.req.query('q') || '').trim()
@@ -29,6 +34,9 @@ onshapeLookup.get('/documents', async (c) => {
     if (q) params.set('q', q)
 
     const data = await onshapeGet(`/documents?${params.toString()}`)
+    const scope = await getOnshapeAccountScope()
+    const ownerIds = new Set([scope.user.id, ...scope.organizations.map((org) => org.id)].filter(Boolean))
+    const scopeKnown = ownerIds.size > 0
     const documents = (data.items ?? [])
       .map((doc) => ({
         id: doc.id,
@@ -37,13 +45,16 @@ onshapeLookup.get('/documents', async (c) => {
         thumbnailUrl: doc.thumbnail?.href ?? null,
         workspaceId: doc.defaultWorkspace?.id ?? null,
         owner: doc.owner?.name ?? null,
+        ownerId: doc.owner?.id ?? null,
+        ownerType: doc.owner?.type ?? null,
       }))
       // A document with no default workspace isn't usable for the BOM
       // endpoint's 'w' branch downstream — drop it here rather than
       // making the frontend/Apps Script side re-check this.
       .filter((d) => d.workspaceId)
+      .filter((d) => !scopeKnown || (d.ownerId && ownerIds.has(d.ownerId)))
 
-    return c.json({ documents, query: q || null })
+    return c.json({ documents, query: q || null, scope: { ...scope, filteringApplied: scopeKnown } })
   } catch (err) {
     console.error('[onshape-lookup:documents]', err)
     return c.json({ error: err.message ?? 'Internal server error' }, 500)
