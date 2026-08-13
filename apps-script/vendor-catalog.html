@@ -5,18 +5,39 @@
 <meta charset="utf-8">
 <style>
   :root{
-    --ink:#1b2430;
-    --sub:#5b6b7c;
-    --line:#dde3e9;
-    --line-soft:#eaeef2;
-    --surface:#ffffff;
-    --bg:#f6f8fa;
-    --accent:#0f6b5c;
-    --accent-dark:#0b5348;
-    --accent-soft:#e7f3f0;
-    --danger:#b3261e;
-    --danger-soft:#fbeceb;
+    --ink:#f5e9ea;
+    --sub:#c9a3a7;
+    --line:#3a1d20;
+    --line-soft:#2a1416;
+    --surface:#1b0f11;
+    --surface-raised:#241315;
+    --bg:#120a0b;
+    --accent:#e0293f;
+    --accent-dark:#b31d30;
+    --accent-soft:rgba(224,41,63,.16);
+    --danger:#ff5c5c;
+    --danger-soft:rgba(255,92,92,.14);
+    --ok:#4fbf7a;
+    --ok-soft:rgba(79,191,122,.14);
     --radius:8px;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --ink:#2a1012;
+      --sub:#7a4348;
+      --line:#f0d3d6;
+      --line-soft:#f8e8ea;
+      --surface:#ffffff;
+      --surface-raised:#fff7f7;
+      --bg:#fdf5f6;
+      --accent:#c8102e;
+      --accent-dark:#9d0c24;
+      --accent-soft:rgba(200,16,46,.09);
+      --danger:#b3261e;
+      --danger-soft:#fbeceb;
+      --ok:#1e7a46;
+      --ok-soft:#e6f5ec;
+    }
   }
   *{box-sizing:border-box}
   body{
@@ -25,156 +46,160 @@
     background:var(--bg);
     color:var(--ink);
     font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    overflow-wrap:anywhere;
   }
-  h3{
-    margin:0 0 2px;
-    font-size:15px;
-    font-weight:650;
-    letter-spacing:-.01em;
-  }
-  .subtitle{
-    margin:0 0 16px;
-    color:var(--sub);
-    font-size:12px;
-  }
+  h3{margin:0 0 2px;font-size:15px;font-weight:650;letter-spacing:-.01em}
+  .subtitle{margin:0 0 16px;color:var(--sub);font-size:12px}
   .field-label{
-    display:block;
-    font-size:11px;
-    font-weight:600;
-    letter-spacing:.02em;
-    text-transform:uppercase;
-    color:var(--sub);
-    margin:0 0 6px;
+    display:block;font-size:11px;font-weight:600;letter-spacing:.04em;
+    text-transform:uppercase;color:var(--sub);margin:0 0 6px;
   }
-  .search-row{
-    display:flex;
-    gap:8px;
-    margin-bottom:4px;
+
+  /* Tabs */
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:14px}
+  .tab{
+    flex:1;text-align:center;padding:8px 4px;font-weight:600;font-size:12.5px;
+    color:var(--sub);cursor:pointer;border-bottom:2px solid transparent;
   }
-  input, select{
-    width:100%;
-    padding:8px 10px;
-    font:inherit;
-    color:var(--ink);
-    background:var(--surface);
-    border:1px solid var(--line);
-    border-radius:var(--radius);
-    outline:none;
-    transition:border-color .12s ease, box-shadow .12s ease;
+  .tab.active{color:var(--accent);border-color:var(--accent)}
+  .panel{display:none}
+  .panel.active{display:block}
+
+  input, select, textarea{
+    width:100%;min-width:0;padding:8px 10px;font:inherit;color:var(--ink);
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    outline:none;transition:border-color .12s ease, box-shadow .12s ease;
   }
-  input:focus, select:focus{
-    border-color:var(--accent);
-    box-shadow:0 0 0 3px var(--accent-soft);
-  }
-  select:disabled, button:disabled{
-    opacity:.5;
-    cursor:not-allowed;
-  }
-  .search-row input{flex:1}
+  textarea{resize:vertical;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px}
+  input::placeholder, textarea::placeholder{color:var(--sub);opacity:.8}
+  input:focus, select:focus, textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+
+  .search-row{display:flex;gap:8px;margin-bottom:10px}
+  .search-row input{flex:1;min-width:0}
+
   button{
-    font:inherit;
-    font-weight:600;
-    padding:8px 14px;
-    border:1px solid transparent;
-    border-radius:var(--radius);
-    cursor:pointer;
-    white-space:nowrap;
-    transition:background .12s ease, border-color .12s ease, transform .05s ease;
+    font:inherit;font-weight:600;padding:8px 14px;border:1px solid var(--line);
+    border-radius:var(--radius);cursor:pointer;white-space:nowrap;background:var(--surface-raised);
+    color:var(--ink);transition:background .12s ease, border-color .12s ease, transform .05s ease;
   }
+  button:hover:not(:disabled){border-color:var(--accent)}
   button:active:not(:disabled){transform:translateY(1px)}
-  .btn-primary{
-    background:var(--accent);
-    color:#fff;
-  }
-  .btn-primary:hover:not(:disabled){background:var(--accent-dark)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn-primary:hover:not(:disabled){background:var(--accent-dark);border-color:var(--accent-dark)}
   .btn-full{width:100%;margin-top:4px}
-  .section{margin-top:18px}
-  .results{
-    max-height:180px;
-    overflow-y:auto;
-    border:1px solid var(--line-soft);
-    border-radius:var(--radius);
-    margin:8px 0;
-    background:var(--surface);
+  .btn-sm{padding:4px 8px;font-size:11.5px}
+
+  .card-list{display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto;overflow-x:hidden;margin-bottom:6px}
+  .card-list:empty::after{content:'No vendor parts yet.';color:var(--sub);font-size:12.5px}
+  .part-card{
+    border:1px solid var(--line);border-radius:var(--radius);padding:9px 10px;background:var(--surface);
+    cursor:pointer;transition:background .1s ease, border-color .1s ease;
   }
-  .results:empty{display:none}
-  .result{
-    padding:9px 10px;
-    font-size:13px;
-    border-bottom:1px solid var(--line-soft);
-    cursor:pointer;
-    transition:background .1s ease;
+  .part-card:hover{border-color:var(--accent)}
+  .part-card .pn{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .part-card .desc{color:var(--sub);font-size:11.5px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .listing-row{
+    display:flex;justify-content:space-between;gap:8px;font-size:11.5px;margin-top:6px;
+    padding-top:6px;border-top:1px solid var(--line-soft);color:var(--sub);
   }
-  .result:last-child{border-bottom:none}
-  .result:hover{background:var(--bg)}
-  .result.selected{
-    background:var(--accent-soft);
-    color:var(--accent-dark);
-    font-weight:600;
+  .listing-row .vname{color:var(--ink);font-weight:600}
+  .listing-row .price{color:var(--accent);font-weight:600;white-space:nowrap}
+  .badge{
+    display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
+    padding:1px 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent);margin-left:6px;
   }
-  .hint{
-    font-size:11.5px;
-    color:var(--sub);
-    margin:6px 0 0;
-  }
+
+  .form-grid{display:flex;flex-direction:column;gap:10px}
+  .form-row{display:flex;gap:8px}
+  .form-row > div{flex:1;min-width:0}
+  .toggle-label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--sub)}
+  input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px}
+
+  .hint{font-size:11.5px;color:var(--sub);margin:6px 0 0;line-height:1.5}
+  .actions{display:flex;gap:8px;margin-top:12px}
+
   #status{
-    margin-top:14px;
-    padding:10px 12px;
-    border-radius:var(--radius);
-    font-size:12.5px;
-    color:var(--sub);
-    background:var(--surface);
-    border:1px solid var(--line-soft);
-    white-space:pre-wrap;
-    min-height:14px;
+    margin-top:14px;padding:10px 12px;border-radius:var(--radius);font-size:12.5px;color:var(--sub);
+    background:var(--surface);border:1px solid var(--line-soft);white-space:pre-wrap;word-break:break-word;min-height:14px;
   }
-  #status.status-error{
-    color:var(--danger);
-    background:var(--danger-soft);
-    border-color:#f2c9c6;
-  }
-  #status.status-busy{color:var(--accent-dark)}
-  #status.status-ok{color:var(--accent-dark);background:var(--accent-soft);border-color:#c9e3dc}
+  #status.status-error{color:var(--danger);background:var(--danger-soft);border-color:var(--danger)}
+  #status.status-busy{color:var(--accent)}
+  #status.status-ok{color:var(--ok);background:var(--ok-soft);border-color:var(--ok)}
   #status:empty{display:none}
-  .spinner{
-    display:inline-block;
-    width:11px;height:11px;
-    border:2px solid var(--accent-soft);
-    border-top-color:var(--accent);
-    border-radius:50%;
-    animation:spin .7s linear infinite;
-    margin-right:6px;
-    vertical-align:-1px;
-  }
-  @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
 
-  <h3>Import Onshape BOM</h3>
-  <p class="subtitle">Search a document, pick an assembly, import into this tab.</p>
+  <h3>Vendor Listings</h3>
+  <p class="subtitle">Match Onshape part numbers to purchasable vendor parts.</p>
 
-  <span class="field-label">Document</span>
-  <div class="search-row">
-    <input id="query" placeholder="Document name…">
-    <button class="btn-primary" onclick="search()">Search</button>
-  </div>
-  <div class="results" id="documents"></div>
-
-  <div class="section">
-    <span class="field-label">Assembly</span>
-    <select id="assembly" disabled>
-      <option>Select a document first</option>
-    </select>
+  <div class="tabs">
+    <div class="tab active" data-tab="browse" onclick="showTab('browse')">Browse</div>
+    <div class="tab" data-tab="edit" onclick="showTab('edit')">Add / Edit</div>
+    <div class="tab" data-tab="csv" onclick="showTab('csv')">CSV Import</div>
   </div>
 
-  <button class="btn-primary btn-full" onclick="importBom()" id="import" disabled>Import into this tab</button>
-  <p class="hint">Re-running this later syncs Onshape-owned columns and leaves your own columns untouched.</p>
+  <div class="panel active" id="panel-browse">
+    <div class="search-row">
+      <input id="filter" placeholder="Filter by part number or vendor…" oninput="renderList()">
+      <button class="btn-primary" onclick="loadCatalog()">Reload</button>
+    </div>
+    <div class="card-list" id="list"></div>
+  </div>
+
+  <div class="panel" id="panel-edit">
+    <div class="form-grid">
+      <div>
+        <span class="field-label">Onshape Part Number</span>
+        <input id="canonicalPartNumber" placeholder="e.g. 100-0042">
+      </div>
+      <div>
+        <span class="field-label">Description</span>
+        <input id="description" placeholder="Optional">
+      </div>
+      <label class="toggle-label"><input type="checkbox" id="vendorAgnostic"> Any vendor listing is acceptable</label>
+      <label class="toggle-label"><input type="checkbox" id="vendorUnknown"> No vendor known yet (placeholder)</label>
+
+      <span class="field-label" style="margin-top:4px">Vendor listing</span>
+      <div class="form-row">
+        <div><input id="vendorName" placeholder="Vendor name"></div>
+        <div><input id="vendorPartNumber" placeholder="Vendor part number"></div>
+      </div>
+      <div>
+        <input id="purchaseUrl" placeholder="Purchase URL">
+      </div>
+      <div class="form-row">
+        <div><input id="latestPrice" type="number" step="0.01" placeholder="Price"></div>
+        <div><input id="currency" placeholder="Currency (USD)"></div>
+        <div><input id="availability" placeholder="Availability"></div>
+      </div>
+      <label class="toggle-label"><input type="checkbox" id="isDefault" checked> Use as default listing for this part</label>
+    </div>
+    <div class="actions">
+      <button onclick="clearForm()">Clear</button>
+      <button class="btn-primary btn-full" onclick="savePart()" id="saveBtn">Save vendor part</button>
+    </div>
+    <p class="hint">Saving upserts by Onshape part number — editing an existing part number updates it in place.</p>
+  </div>
+
+  <div class="panel" id="panel-csv">
+    <span class="field-label">Paste CSV</span>
+    <p class="hint" style="margin:0 0 8px">Header row required. Columns: canonicalPartNumber, description, vendorName, vendorPartNumber, purchaseUrl, latestPrice, currency, availability, isDefault</p>
+    <textarea id="csvInput" rows="8" placeholder="canonicalPartNumber,description,vendorName,vendorPartNumber,purchaseUrl,latestPrice,currency,availability,isDefault
+100-0042,Bracket,McMaster-Carr,91290A123,https://...,4.12,USD,In stock,true"></textarea>
+    <button class="btn-primary btn-full" onclick="importCsv()" style="margin-top:8px">Import CSV</button>
+  </div>
 
   <div id="status"></div>
 
 <script>
-let selected;
+let catalog = [];
+
+function showTab(name){
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+}
 
 function setStatus(text, kind){
   const el = document.getElementById('status');
@@ -184,70 +209,138 @@ function setStatus(text, kind){
 function busy(text){ setStatus(text, 'busy'); }
 function fail(e){ setStatus('Error: ' + (e.message || e), 'error'); }
 
-function search(){
-  const q = document.getElementById('query').value;
-  busy('Searching…');
-  google.script.run.withSuccessHandler(showDocuments).withFailureHandler(fail).searchDocuments(q, 25);
+function loadCatalog(){
+  busy('Loading vendor catalog…');
+  google.script.run.withSuccessHandler(data => {
+    catalog = data.parts || data || [];
+    renderList();
+    setStatus(catalog.length + ' part(s) loaded.', 'ok');
+  }).withFailureHandler(fail).getVendorCatalog();
 }
 
-function showDocuments(data){
-  const list = data.documents || data || [];
-  const box = document.getElementById('documents');
-  box.innerHTML = '';
-  list.forEach(d => {
-    const row = document.createElement('div');
-    row.className = 'result';
-    row.textContent = d.name || d.id;
-    row.onclick = () => pick(d, row);
-    box.appendChild(row);
-  });
-  setStatus(list.length ? (list.length + ' document(s) found — pick one.') : 'No documents matched.');
+function renderList(){
+  const q = (document.getElementById('filter').value || '').toLowerCase();
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  catalog
+    .filter(p => !q || (p.canonicalPartNumber || '').toLowerCase().includes(q) ||
+      (p.listings || []).some(l => (l.vendorName || '').toLowerCase().includes(q)))
+    .forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'part-card';
+      const listings = p.listings || [];
+      const def = listings.find(l => l.isDefault) || listings[0];
+      card.innerHTML =
+        '<div class="pn">' + esc(p.canonicalPartNumber) +
+        (p.vendorAgnostic ? '<span class="badge">Any vendor</span>' : '') +
+        (p.vendorUnknown ? '<span class="badge">Unknown vendor</span>' : '') + '</div>' +
+        (p.description ? '<div class="desc">' + esc(p.description) + '</div>' : '') +
+        (def ? '<div class="listing-row"><span class="vname">' + esc(def.vendorName) + '</span>' +
+          '<span class="price">' + (def.latestPrice != null ? esc(def.currency || 'USD') + ' ' + esc(def.latestPrice) : '') + '</span></div>' : '');
+      card.onclick = () => editPart(p);
+      list.appendChild(card);
+    });
 }
 
-function pick(d, node){
-  document.querySelectorAll('.result').forEach(x => x.classList.remove('selected'));
-  node.classList.add('selected');
-  selected = { documentId: d.id, workspaceId: d.workspaceId || d.defaultWorkspaceId };
-  document.getElementById('assembly').disabled = true;
-  document.getElementById('import').disabled = true;
-  busy('Loading assemblies…');
-  google.script.run.withSuccessHandler(showAssemblies).withFailureHandler(fail)
-    .listAssemblies(selected.documentId, selected.workspaceId);
+function editPart(p){
+  showTab('edit');
+  document.getElementById('canonicalPartNumber').value = p.canonicalPartNumber || '';
+  document.getElementById('description').value = p.description || '';
+  document.getElementById('vendorAgnostic').checked = !!p.vendorAgnostic;
+  document.getElementById('vendorUnknown').checked = !!p.vendorUnknown;
+  const def = (p.listings || []).find(l => l.isDefault) || (p.listings || [])[0] || {};
+  document.getElementById('vendorName').value = def.vendorName || '';
+  document.getElementById('vendorPartNumber').value = def.vendorPartNumber || '';
+  document.getElementById('purchaseUrl').value = def.purchaseUrl || '';
+  document.getElementById('latestPrice').value = def.latestPrice != null ? def.latestPrice : '';
+  document.getElementById('currency').value = def.currency || '';
+  document.getElementById('availability').value = def.availability || '';
+  document.getElementById('isDefault').checked = def.isDefault !== false;
+  setStatus('Editing ' + p.canonicalPartNumber + '. Saving will update this part.');
 }
 
-function showAssemblies(data){
-  const list = data.assemblies || data || [];
-  const el = document.getElementById('assembly');
-  el.innerHTML = '<option value="">Select an assembly</option>';
-  list.forEach(x => {
-    const o = document.createElement('option');
-    o.value = x.id;
-    o.textContent = x.name || x.id;
-    el.appendChild(o);
-  });
-  el.disabled = false;
-  document.getElementById('import').disabled = false;
-  setStatus(list.length ? 'Select an assembly.' : 'No assembly elements found in this document.');
+function clearForm(){
+  ['canonicalPartNumber','description','vendorName','vendorPartNumber','purchaseUrl','latestPrice','currency','availability']
+    .forEach(id => document.getElementById(id).value = '');
+  document.getElementById('vendorAgnostic').checked = false;
+  document.getElementById('vendorUnknown').checked = false;
+  document.getElementById('isDefault').checked = true;
+  setStatus('');
 }
 
-function importBom(){
-  const assemblyId = document.getElementById('assembly').value;
-  if (!selected || !assemblyId) return setStatus('Select an assembly first.', 'error');
-  selected.elementId = assemblyId;
-  document.getElementById('import').disabled = true;
-  busy('Importing…');
-  google.script.run
-    .withSuccessHandler(r => {
-      document.getElementById('import').disabled = false;
-      setStatus('Imported ' + (r.partsFound || r.rowsWritten || 0) + ' row(s).', 'ok');
-    })
-    .withFailureHandler(e => { document.getElementById('import').disabled = false; fail(e); })
-    .importBom(selected);
+function savePart(){
+  const pn = document.getElementById('canonicalPartNumber').value.trim();
+  if (!pn) return setStatus('Onshape part number is required.', 'error');
+  const vendorName = document.getElementById('vendorName').value.trim();
+  const vendorPartNumber = document.getElementById('vendorPartNumber').value.trim();
+  const listings = [];
+  if (vendorName && vendorPartNumber){
+    listings.push({
+      vendorName: vendorName,
+      vendorPartNumber: vendorPartNumber,
+      purchaseUrl: document.getElementById('purchaseUrl').value.trim(),
+      latestPrice: document.getElementById('latestPrice').value ? Number(document.getElementById('latestPrice').value) : null,
+      currency: document.getElementById('currency').value.trim() || 'USD',
+      availability: document.getElementById('availability').value.trim(),
+      isDefault: document.getElementById('isDefault').checked,
+      active: true
+    });
+  }
+  const part = {
+    canonicalPartNumber: pn,
+    description: document.getElementById('description').value.trim(),
+    vendorAgnostic: document.getElementById('vendorAgnostic').checked,
+    vendorUnknown: document.getElementById('vendorUnknown').checked,
+    listings: listings
+  };
+  document.getElementById('saveBtn').disabled = true;
+  busy('Saving…');
+  google.script.run.withSuccessHandler(() => {
+    document.getElementById('saveBtn').disabled = false;
+    setStatus('Saved ' + pn + '.', 'ok');
+    loadCatalog();
+  }).withFailureHandler(e => { document.getElementById('saveBtn').disabled = false; fail(e); }).saveVendorPart(part);
 }
 
-document.getElementById('query').addEventListener('keydown', e => {
-  if (e.key === 'Enter') search();
-});
+function parseCsv(text){
+  const lines = text.trim().split(/\r?\n/).filter(Boolean);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const cells = line.split(',').map(c => c.trim());
+    const row = {};
+    headers.forEach((h, i) => row[h] = cells[i]);
+    const listing = {
+      vendorName: row.vendorName,
+      vendorPartNumber: row.vendorPartNumber,
+      purchaseUrl: row.purchaseUrl,
+      latestPrice: row.latestPrice ? Number(row.latestPrice) : null,
+      currency: row.currency || 'USD',
+      availability: row.availability,
+      isDefault: String(row.isDefault).toLowerCase() === 'true',
+      active: true
+    };
+    return {
+      canonicalPartNumber: row.canonicalPartNumber,
+      description: row.description,
+      listings: (listing.vendorName && listing.vendorPartNumber) ? [listing] : []
+    };
+  }).filter(r => r.canonicalPartNumber);
+}
+
+function importCsv(){
+  const rows = parseCsv(document.getElementById('csvInput').value);
+  if (!rows.length) return setStatus('No valid rows found. Check the header row.', 'error');
+  busy('Importing ' + rows.length + ' row(s)…');
+  google.script.run.withSuccessHandler(r => {
+    setStatus('Imported ' + (r.upserted || rows.length) + ' row(s).', 'ok');
+    loadCatalog();
+  }).withFailureHandler(fail).importVendorCsv(rows);
+}
+
+function esc(x){ return String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+loadCatalog();
 </script>
 </body>
 </html>

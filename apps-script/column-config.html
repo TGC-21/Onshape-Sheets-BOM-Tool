@@ -1,2 +1,349 @@
-<!doctype html><html><head><base target="_top"><style>body{font:13px Arial;padding:12px;color:#202124}h3{margin:0 0 6px}.hint{color:#5f6368;margin-bottom:12px}.row{display:grid;grid-template-columns:24px 1fr 95px 95px 28px;gap:6px;align-items:center;border:1px solid #dadce0;border-radius:4px;padding:7px;margin:5px 0}.handle{cursor:grab;color:#5f6368}.label{font-weight:500}.meta{font-size:11px;color:#5f6368}.options{grid-column:2/5;width:100%;box-sizing:border-box;padding:5px}.actions{display:flex;gap:8px;margin-top:12px}button{padding:8px 12px;cursor:pointer}.hidden{display:none}.status{color:#5f6368;margin-top:10px}</style></head><body><h3>Configure BOM columns</h3><div class="hint">Drag rows to change display order. Onshape fields are protected; user columns can be checkboxes or dropdowns.</div><div id="columns">Loading…</div><div class="actions"><button onclick="addColumn()">Add user column</button><button onclick="save()">Save and apply</button><button onclick="resetConfig()">Reset defaults</button></div><div id="status" class="status"></div><script>
-let config=[];function load(){google.script.run.withSuccessHandler(c=>{config=c;render()}).withFailureHandler(fail).getColumnConfig()}function render(){columns.innerHTML='';config.forEach((c,i)=>{const r=document.createElement('div');r.className='row';r.draggable=true;r.ondragstart=()=>r.dataset.drag=i;r.ondragover=e=>e.preventDefault();r.ondrop=()=>{const from=+r.dataset.drag;[config[from],config[i]]=[config[i],config[from]];render()};r.innerHTML='<span class="handle">☷</span><span><span class="label">'+esc(c.label)+'</span><br><span class="meta">'+esc(c.source)+' · '+esc(c.id)+'</span></span><select onchange="typeChange('+i+',this.value)" '+(c.source!=='user'?'disabled':'')+'><option>text</option><option>number</option><option>url</option><option>checkbox</option><option>dropdown</option></select><label><input type="checkbox" '+(c.enabled!==false?'checked':'')+' onchange="config['+i+'].enabled=this.checked"> On</label><button onclick="removeColumn('+i+')" '+(c.source!=='user'?'disabled':'')+'>×</button>';r.querySelector('select').value=c.type;if(c.type==='dropdown'){const o=document.createElement('input');o.className='options';o.placeholder='Dropdown options, comma separated';o.value=(c.options||[]).join(', ');o.onchange=()=>c.options=o.value.split(',').map(x=>x.trim()).filter(Boolean);r.appendChild(o)}columns.appendChild(r)})}function typeChange(i,v){config[i].type=v;render()}function addColumn(){const label=prompt('Column name');if(!label)return;const id=label.toLowerCase().replace(/[^a-z0-9]+(.)/g,(_,x)=>x.toUpperCase()).replace(/[^a-zA-Z0-9]/g,'');config.push({id:id||'custom'+Date.now(),label:label,source:'user',type:'checkbox',editable:true});render()}function removeColumn(i){config.splice(i,1);render()}function save(){status.textContent='Saving…';google.script.run.withSuccessHandler(()=>status.textContent='Saved and applied to the active BOM tab.').withFailureHandler(fail).saveColumnConfig(config)}function resetConfig(){load()}function fail(e){status.textContent='Error: '+e.message}function esc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}load();</script></body></html>
+<!doctype html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root{
+    --ink:#f5e9ea;
+    --sub:#c9a3a7;
+    --line:#3a1d20;
+    --line-soft:#2a1416;
+    --surface:#1b0f11;
+    --surface-raised:#241315;
+    --bg:#120a0b;
+    --accent:#e0293f;
+    --accent-dark:#b31d30;
+    --accent-soft:rgba(224,41,63,.16);
+    --danger:#ff5c5c;
+    --danger-soft:rgba(255,92,92,.14);
+    --ok:#4fbf7a;
+    --ok-soft:rgba(79,191,122,.14);
+    --onshape:#c9a3a7;
+    --onshape-soft:rgba(201,163,167,.12);
+    --user:#e0293f;
+    --user-soft:rgba(224,41,63,.14);
+    --vendor:#e0a52c;
+    --vendor-soft:rgba(224,165,44,.14);
+    --radius:8px;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --ink:#2a1012;
+      --sub:#7a4348;
+      --line:#f0d3d6;
+      --line-soft:#f8e8ea;
+      --surface:#ffffff;
+      --surface-raised:#fff7f7;
+      --bg:#fdf5f6;
+      --accent:#c8102e;
+      --accent-dark:#9d0c24;
+      --accent-soft:rgba(200,16,46,.09);
+      --danger:#b3261e;
+      --danger-soft:#fbeceb;
+      --ok:#1e7a46;
+      --ok-soft:#e6f5ec;
+      --onshape:#7a4348;
+      --onshape-soft:#f2e4e5;
+      --user:#c8102e;
+      --user-soft:rgba(200,16,46,.08);
+      --vendor:#a8730a;
+      --vendor-soft:#f8ecd6;
+    }
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    padding:16px;
+    background:var(--bg);
+    color:var(--ink);
+    font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    overflow-wrap:anywhere;
+  }
+  h3{margin:0 0 2px;font-size:15px;font-weight:650;letter-spacing:-.01em}
+  .hint{color:var(--sub);margin:0 0 16px;font-size:12px;line-height:1.5}
+
+  #columns{display:flex;flex-direction:column;gap:8px}
+  .empty-msg{color:var(--sub);font-size:12.5px;padding:10px 0}
+
+  .row{
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:9px 10px;
+    background:var(--surface);
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:8px;
+  }
+  .row.dragging{opacity:.5}
+  .row.drag-over{border-color:var(--accent)}
+
+  .handle{
+    cursor:grab;
+    color:var(--sub);
+    font-size:14px;
+    flex:0 0 auto;
+    user-select:none;
+  }
+
+  .row-main{
+    flex:1 1 140px;
+    min-width:0;
+  }
+  .label{
+    font-weight:600;
+    display:block;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .meta{
+    display:inline-block;
+    margin-top:2px;
+    font-size:10.5px;
+    font-weight:700;
+    letter-spacing:.03em;
+    text-transform:uppercase;
+    padding:1px 6px;
+    border-radius:999px;
+  }
+  .meta.src-onshape{color:var(--onshape);background:var(--onshape-soft)}
+  .meta.src-user{color:var(--user);background:var(--user-soft)}
+  .meta.src-vendor{color:var(--vendor);background:var(--vendor-soft)}
+
+  .row-controls{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex:0 0 auto;
+  }
+
+  select{
+    font:inherit;
+    font-size:12px;
+    color:var(--ink);
+    background:var(--surface-raised);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:5px 6px;
+    outline:none;
+    max-width:100px;
+  }
+  select:disabled{opacity:.4;cursor:not-allowed}
+  select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+
+  .toggle-label{
+    display:flex;
+    align-items:center;
+    gap:4px;
+    font-size:11.5px;
+    color:var(--sub);
+    white-space:nowrap;
+  }
+  input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px}
+
+  .icon-btn{
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--sub);
+    width:26px;
+    height:26px;
+    line-height:1;
+    padding:0;
+    border-radius:6px;
+    cursor:pointer;
+    font-size:14px;
+  }
+  .icon-btn:hover:not(:disabled){color:var(--danger);border-color:var(--danger)}
+  .icon-btn:disabled{opacity:.35;cursor:not-allowed}
+
+  .options{
+    flex:1 1 100%;
+    width:100%;
+    box-sizing:border-box;
+    padding:7px 9px;
+    font:inherit;
+    font-size:12px;
+    color:var(--ink);
+    background:var(--surface-raised);
+    border:1px solid var(--line);
+    border-radius:6px;
+    outline:none;
+  }
+  .options:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+
+  .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  button{
+    font:inherit;
+    font-weight:600;
+    font-size:12.5px;
+    padding:8px 12px;
+    cursor:pointer;
+    border-radius:var(--radius);
+    border:1px solid var(--line);
+    background:var(--surface-raised);
+    color:var(--ink);
+    transition:background .12s ease, border-color .12s ease;
+  }
+  button:hover{border-color:var(--accent)}
+  .actions .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .actions .btn-primary:hover{background:var(--accent-dark);border-color:var(--accent-dark)}
+
+  .status{
+    margin-top:12px;
+    padding:9px 11px;
+    border-radius:var(--radius);
+    font-size:12px;
+    color:var(--sub);
+    background:var(--surface);
+    border:1px solid var(--line-soft);
+    min-height:14px;
+    white-space:pre-wrap;
+    word-break:break-word;
+  }
+  .status:empty{display:none;padding:0;border:none;margin-top:0}
+  .status.error{color:var(--danger);background:var(--danger-soft);border-color:var(--danger)}
+  .status.ok{color:var(--ok);background:var(--ok-soft);border-color:var(--ok)}
+</style>
+</head>
+<body>
+<h3>Configure BOM columns</h3>
+<div class="hint">Drag rows to change display order. Onshape fields are protected; user columns can be checkboxes or dropdowns.</div>
+<div id="columns"><div class="empty-msg">Loading…</div></div>
+<div class="actions">
+  <button onclick="addColumn()">+ Add user column</button>
+  <button onclick="resetConfig()">Reset defaults</button>
+  <button class="btn-primary" onclick="save()">Save and apply</button>
+</div>
+<div id="status" class="status"></div>
+<script>
+let config = [];
+
+function load(){
+  document.getElementById('columns').innerHTML = '<div class="empty-msg">Loading…</div>';
+  google.script.run.withSuccessHandler(c => { config = c; render(); }).withFailureHandler(fail).getColumnConfig();
+}
+
+function render(){
+  const columns = document.getElementById('columns');
+  columns.innerHTML = '';
+  if (!config.length){
+    columns.innerHTML = '<div class="empty-msg">No columns configured.</div>';
+    return;
+  }
+  config.forEach((c, i) => {
+    const r = document.createElement('div');
+    r.className = 'row';
+    r.draggable = true;
+    r.ondragstart = () => { r.dataset.drag = i; r.classList.add('dragging'); };
+    r.ondragend = () => r.classList.remove('dragging');
+    r.ondragover = e => { e.preventDefault(); r.classList.add('drag-over'); };
+    r.ondragleave = () => r.classList.remove('drag-over');
+    r.ondrop = () => {
+      r.classList.remove('drag-over');
+      const from = +r.dataset.drag;
+      const [moved] = config.splice(from, 1);
+      config.splice(i, 0, moved);
+      render();
+    };
+
+    const locked = c.source !== 'user';
+
+    const handle = document.createElement('span');
+    handle.className = 'handle';
+    handle.textContent = '\u2637';
+    r.appendChild(handle);
+
+    const main = document.createElement('div');
+    main.className = 'row-main';
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.title = c.label;
+    label.textContent = c.label;
+    main.appendChild(label);
+    const meta = document.createElement('span');
+    meta.className = 'meta src-' + esc(c.source);
+    meta.textContent = c.source;
+    main.appendChild(meta);
+    r.appendChild(main);
+
+    const controls = document.createElement('div');
+    controls.className = 'row-controls';
+
+    const select = document.createElement('select');
+    select.disabled = locked;
+    ['text','number','url','checkbox','dropdown'].forEach(t => {
+      const o = document.createElement('option');
+      o.value = t; o.textContent = t;
+      select.appendChild(o);
+    });
+    select.value = c.type;
+    select.onchange = () => typeChange(i, select.value);
+    controls.appendChild(select);
+
+    const toggle = document.createElement('label');
+    toggle.className = 'toggle-label';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = c.enabled !== false;
+    cb.onchange = () => { config[i].enabled = cb.checked; };
+    toggle.appendChild(cb);
+    toggle.appendChild(document.createTextNode('On'));
+    controls.appendChild(toggle);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'icon-btn';
+    removeBtn.textContent = '\u00d7';
+    removeBtn.disabled = locked;
+    removeBtn.title = locked ? "Can't remove a protected column" : 'Remove column';
+    removeBtn.onclick = () => removeColumn(i);
+    controls.appendChild(removeBtn);
+
+    r.appendChild(controls);
+
+    if (c.type === 'dropdown'){
+      const o = document.createElement('input');
+      o.className = 'options';
+      o.placeholder = 'Dropdown options, comma separated';
+      o.value = (c.options || []).join(', ');
+      o.onchange = () => { c.options = o.value.split(',').map(x => x.trim()).filter(Boolean); };
+      r.appendChild(o);
+    }
+
+    columns.appendChild(r);
+  });
+}
+
+function typeChange(i, v){ config[i].type = v; render(); }
+
+function addColumn(){
+  const label = prompt('Column name');
+  if (!label) return;
+  const id = label.toLowerCase().replace(/[^a-z0-9]+(.)/g, (_, x) => x.toUpperCase()).replace(/[^a-zA-Z0-9]/g, '');
+  config.push({ id: id || 'custom' + Date.now(), label: label, source: 'user', type: 'checkbox', editable: true, enabled: true });
+  render();
+}
+
+function removeColumn(i){ config.splice(i, 1); render(); }
+
+function save(){
+  setStatus('Saving…');
+  google.script.run.withSuccessHandler(() => setStatus('Saved and applied to the active BOM tab.', 'ok'))
+    .withFailureHandler(fail).saveColumnConfig(config);
+}
+
+function resetConfig(){ load(); }
+
+function setStatus(text, kind){
+  const el = document.getElementById('status');
+  el.className = 'status' + (kind ? ' ' + kind : '');
+  el.textContent = text || '';
+}
+function fail(e){ setStatus('Error: ' + (e.message || e), 'error'); }
+function esc(x){ return String(x ?? ''); }
+
+load();
+</script>
+</body>
+</html>

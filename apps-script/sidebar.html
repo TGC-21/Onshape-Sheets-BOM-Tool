@@ -5,18 +5,41 @@
 <meta charset="utf-8">
 <style>
   :root{
-    --ink:#1b2430;
-    --sub:#5b6b7c;
-    --line:#dde3e9;
-    --line-soft:#eaeef2;
-    --surface:#ffffff;
-    --bg:#f6f8fa;
-    --accent:#0f6b5c;
-    --accent-dark:#0b5348;
-    --accent-soft:#e7f3f0;
-    --danger:#b3261e;
-    --danger-soft:#fbeceb;
+    --ink:#f5e9ea;
+    --sub:#c9a3a7;
+    --line:#3a1d20;
+    --line-soft:#2a1416;
+    --surface:#1b0f11;
+    --surface-raised:#241315;
+    --bg:#120a0b;
+    --accent:#e0293f;
+    --accent-dark:#b31d30;
+    --accent-soft:rgba(224,41,63,.16);
+    --danger:#ff5c5c;
+    --danger-soft:rgba(255,92,92,.14);
+    --ok:#4fbf7a;
+    --ok-soft:rgba(79,191,122,.14);
     --radius:8px;
+    --shadow:0 1px 2px rgba(0,0,0,.4);
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --ink:#2a1012;
+      --sub:#7a4348;
+      --line:#f0d3d6;
+      --line-soft:#f8e8ea;
+      --surface:#ffffff;
+      --surface-raised:#fff7f7;
+      --bg:#fdf5f6;
+      --accent:#c8102e;
+      --accent-dark:#9d0c24;
+      --accent-soft:rgba(200,16,46,.09);
+      --danger:#b3261e;
+      --danger-soft:#fbeceb;
+      --ok:#1e7a46;
+      --ok-soft:#e6f5ec;
+      --shadow:0 1px 2px rgba(0,0,0,.06);
+    }
   }
   *{box-sizing:border-box}
   body{
@@ -25,12 +48,14 @@
     background:var(--bg);
     color:var(--ink);
     font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    overflow-wrap:anywhere;
   }
   h3{
     margin:0 0 2px;
     font-size:15px;
     font-weight:650;
     letter-spacing:-.01em;
+    color:var(--ink);
   }
   .subtitle{
     margin:0 0 16px;
@@ -41,7 +66,7 @@
     display:block;
     font-size:11px;
     font-weight:600;
-    letter-spacing:.02em;
+    letter-spacing:.04em;
     text-transform:uppercase;
     color:var(--sub);
     margin:0 0 6px;
@@ -53,6 +78,7 @@
   }
   input, select{
     width:100%;
+    min-width:0;
     padding:8px 10px;
     font:inherit;
     color:var(--ink);
@@ -62,36 +88,42 @@
     outline:none;
     transition:border-color .12s ease, box-shadow .12s ease;
   }
+  input::placeholder{color:var(--sub);opacity:.8}
   input:focus, select:focus{
     border-color:var(--accent);
     box-shadow:0 0 0 3px var(--accent-soft);
   }
   select:disabled, button:disabled{
-    opacity:.5;
+    opacity:.45;
     cursor:not-allowed;
   }
-  .search-row input{flex:1}
+  .search-row input{flex:1;min-width:0}
   button{
     font:inherit;
     font-weight:600;
     padding:8px 14px;
-    border:1px solid transparent;
+    border:1px solid var(--line);
     border-radius:var(--radius);
     cursor:pointer;
     white-space:nowrap;
+    background:var(--surface-raised);
+    color:var(--ink);
     transition:background .12s ease, border-color .12s ease, transform .05s ease;
   }
+  button:hover:not(:disabled){border-color:var(--accent)}
   button:active:not(:disabled){transform:translateY(1px)}
   .btn-primary{
     background:var(--accent);
+    border-color:var(--accent);
     color:#fff;
   }
-  .btn-primary:hover:not(:disabled){background:var(--accent-dark)}
+  .btn-primary:hover:not(:disabled){background:var(--accent-dark);border-color:var(--accent-dark)}
   .btn-full{width:100%;margin-top:4px}
   .section{margin-top:18px}
   .results{
     max-height:180px;
     overflow-y:auto;
+    overflow-x:hidden;
     border:1px solid var(--line-soft);
     border-radius:var(--radius);
     margin:8px 0;
@@ -104,18 +136,22 @@
     border-bottom:1px solid var(--line-soft);
     cursor:pointer;
     transition:background .1s ease;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
   }
   .result:last-child{border-bottom:none}
-  .result:hover{background:var(--bg)}
+  .result:hover{background:var(--surface-raised)}
   .result.selected{
     background:var(--accent-soft);
-    color:var(--accent-dark);
+    color:var(--accent);
     font-weight:600;
   }
   .hint{
     font-size:11.5px;
     color:var(--sub);
     margin:6px 0 0;
+    line-height:1.5;
   }
   #status{
     margin-top:14px;
@@ -126,15 +162,16 @@
     background:var(--surface);
     border:1px solid var(--line-soft);
     white-space:pre-wrap;
+    word-break:break-word;
     min-height:14px;
   }
   #status.status-error{
     color:var(--danger);
     background:var(--danger-soft);
-    border-color:#f2c9c6;
+    border-color:var(--danger);
   }
-  #status.status-busy{color:var(--accent-dark)}
-  #status.status-ok{color:var(--accent-dark);background:var(--accent-soft);border-color:#c9e3dc}
+  #status.status-busy{color:var(--accent)}
+  #status.status-ok{color:var(--ok);background:var(--ok-soft);border-color:var(--ok)}
   #status:empty{display:none}
   .spinner{
     display:inline-block;
@@ -157,6 +194,8 @@
   <span class="field-label">Document</span>
   <div class="search-row">
     <select id="scope"><option value="owned">My + organization documents</option><option value="mine">My documents</option><option value="organization">Organization documents</option></select>
+  </div>
+  <div class="search-row">
     <input id="query" placeholder="Document name…">
     <button class="btn-primary" onclick="search()">Search</button>
   </div>
@@ -198,6 +237,7 @@ function showDocuments(data){
   list.forEach(d => {
     const row = document.createElement('div');
     row.className = 'result';
+    row.title = d.name || d.id;
     row.textContent = d.name || d.id;
     row.onclick = () => pick(d, row);
     box.appendChild(row);

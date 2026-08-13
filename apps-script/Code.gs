@@ -5,6 +5,8 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('Onshape BOM')
     .addItem('Import…', 'showImportSidebar').addItem('Manage vendor listings', 'showVendorCatalog').addItem('Configure columns…', 'showColumnConfig').addItem('Sync now', 'syncNow')
     .addToUi();
+  // Re-apply validation when a configured spreadsheet is reopened.
+  try { applyColumnValidation_(); } catch (_) {}
 }
 function showImportSidebar() { SpreadsheetApp.getUi().showSidebar(HtmlService.createHtmlOutputFromFile('sidebar').setTitle('Onshape BOM Import')); }
 function showVendorCatalog() { SpreadsheetApp.getUi().showSidebar(HtmlService.createHtmlOutputFromFile('vendor-catalog').setTitle('Vendor Listings')); }
@@ -13,15 +15,24 @@ function defaultColumnConfig_() { return [{id:'name',label:'Name',source:'onshap
 function configSheet_() { const ss=SpreadsheetApp.getActive(); let sheet=ss.getSheetByName('Config'); if(!sheet) { sheet=ss.insertSheet('Config'); sheet.hideSheet(); } return sheet; }
 function getColumnConfig() { const sheet=configSheet_(); const value=sheet.getRange('A1').getValue(); return value ? JSON.parse(value) : defaultColumnConfig_(); }
 function saveColumnConfig(config) { config=config||defaultColumnConfig_(); configSheet_().getRange('A1').setValue(JSON.stringify(config)); applyColumnOrder_(config); applyColumnValidation_(); return true; }
-function applyColumnOrder_(config) { const sheet=SpreadsheetApp.getActiveSheet(); const max=Math.max(sheet.getLastColumn(), config.length+1); for(let i=0;i<config.length;i++){const wanted=config[i].label;const headers=sheet.getRange(1,1,1,max).getValues()[0];const current=headers.indexOf(wanted)+1;const target=i+2;if(current>0&&current!==target)sheet.moveColumns(sheet.getRange(1,current,sheet.getMaxRows(),1),target);} }
+function applyColumnOrder_(config) { const sheet=SpreadsheetApp.getActiveSheet(); const active=config.filter(c=>c.enabled!==false); const max=Math.max(sheet.getLastColumn(), active.length+1); for(let i=0;i<active.length;i++){const wanted=active[i].label;const headers=sheet.getRange(1,1,1,max).getValues()[0];const current=headers.indexOf(wanted)+1;const target=i+2;if(current>0&&current!==target)sheet.moveColumns(sheet.getRange(1,current,sheet.getMaxRows(),1),target);} }
 function applyColumnValidation_() {
   const sheet = SpreadsheetApp.getActiveSheet();
   const config = getColumnConfig();
-  config.forEach((column, index) => {
+  const rowCount = Math.max(sheet.getMaxRows() - 1, 1);
+  let displayIndex = 0;
+  config.forEach((column) => {
+    if (column.enabled === false) return;
+    const columnIndex = displayIndex++;
     if (column.source !== 'user') return;
-    const range = sheet.getRange(2, index + 2, Math.max(sheet.getMaxRows() - 1, 1), 1);
-    if (column.type === 'checkbox') range.insertCheckboxes();
-    if (column.type === 'dropdown' && column.options && column.options.length) range.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(column.options, true).setAllowInvalid(false).build());
+    const range = sheet.getRange(2, columnIndex + 2, rowCount, 1);
+    // Clear an older rule first, but do not change any cell values.
+    range.setDataValidation(null);
+    if (column.type === 'checkbox') {
+      range.setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().setAllowInvalid(false).build());
+    } else if (column.type === 'dropdown' && column.options && column.options.length) {
+      range.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(column.options, true).setAllowInvalid(false).build());
+    }
   });
 }
 function getConfiguration() { return { spreadsheetId: SpreadsheetApp.getActive().getId(), sheetName: SpreadsheetApp.getActiveSheet().getName() }; }
@@ -40,9 +51,20 @@ function listAssemblies(documentId, workspaceId) { return backendRequest_('get',
 function getVendorCatalog() { return backendRequest_('get', '/api/catalog'); }
 function saveVendorPart(part) { return backendRequest_('post', '/api/catalog', part); }
 function importVendorCsv(rows) { return backendRequest_('post', '/api/catalog/csv', { rows: rows }); }
-function importBom(selection) { const c = getConfiguration(); return backendRequest_('post', '/api/import', { documentId: selection.documentId, workspaceId: selection.workspaceId, elementId: selection.elementId, spreadsheetId: c.spreadsheetId, sheetName: selection.sheetName || c.sheetName }); }
+function getVendorMatches(partNumber) { return backendRequest_('get', '/api/catalog/matches?partNumber=' + encodeURIComponent(partNumber || '')); }
+function headerColumn_(sheet, label, fallback) { const headers=sheet.getRange(1,1,1,Math.max(sheet.getLastColumn(),1)).getValues()[0]; const i=headers.indexOf(label); return i >= 0 ? i + 1 : fallback; }
+function vendorLabel_(v) { return String(v.vendorName||'') + ' — ' + String(v.vendorPartNumber||''); }
+function applyVendorDropdowns_() { const sheet=SpreadsheetApp.getActiveSheet(); const pnCol=headerColumn_(sheet,'Part Number',3), vendorCol=headerColumn_(sheet,'Vendor',9), rows=Math.max(sheet.getLastRow()-1,0); if(!rows)return; sheet.getRange(2,pnCol,rows,1).getValues().forEach((r,i)=>{const cell=sheet.getRange(i+2,vendorCol),pn=String(r[0]||'');if(!pn){cell.clearDataValidations();return}try{const labels=(getVendorMatches(pn).listings||[]).map(vendorLabel_);if(labels.length)cell.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(labels,true).setAllowInvalid(false).build());else cell.clearDataValidations()}catch(_){}}) }
+function onEdit(e) { if(!e||!e.range||e.range.getRow()<2)return; const sheet=e.range.getSheet(),vendorCol=headerColumn_(sheet,'Vendor',9);if(e.range.getColumn()!==vendorCol)return;const pn=sheet.getRange(e.range.getRow(),headerColumn_(sheet,'Part Number',3)).getValue();try{const selected=(getVendorMatches(pn).listings||[]).find(v=>vendorLabel_(v)===String(e.value||''));if(!selected)return;const set=(label,value)=>{const col=headerColumn_(sheet,label,0);if(col)sheet.getRange(e.range.getRow(),col).setValue(value==null?'':value)};set('Vendor Part Number',selected.vendorPartNumber);set('Purchase URL',selected.purchaseUrl);set('Price',selected.latestPrice);set('Availability',selected.availability);const id=headerColumn_(sheet,'Listing Id (hidden — do not edit)',28),snap=headerColumn_(sheet,'Listing Snapshot (hidden — do not edit)',29);sheet.getRange(e.range.getRow(),id).setValue(selected.id);sheet.getRange(e.range.getRow(),snap).setValue(JSON.stringify(selected))}catch(_){}}
+function importBom(selection) {
+  const c = getConfiguration();
+  const result = backendRequest_('post', '/api/import', { documentId: selection.documentId, workspaceId: selection.workspaceId, elementId: selection.elementId, spreadsheetId: c.spreadsheetId, sheetName: selection.sheetName || c.sheetName });
+  applyColumnValidation_();
+  applyVendorDropdowns_();
+  return result;
+}
 function syncNow() {
   const c = getConfiguration();
-  try { const r = backendRequest_('post', '/api/sync', { spreadsheetId: c.spreadsheetId, sheetName: c.sheetName }); SpreadsheetApp.getActive().toast('Sync complete: ' + (r.rowsUpdated || 0) + ' updated, ' + (r.rowsInserted || 0) + ' inserted, ' + (r.rowsDeleted || 0) + ' deleted.', 'Onshape BOM', 8); return r; }
+  try { const r = backendRequest_('post', '/api/sync', { spreadsheetId: c.spreadsheetId, sheetName: c.sheetName }); applyColumnValidation_(); applyVendorDropdowns_(); SpreadsheetApp.getActive().toast('Sync complete: ' + (r.rowsUpdated || 0) + ' updated, ' + (r.rowsInserted || 0) + ' inserted, ' + (r.rowsDeleted || 0) + ' deleted.', 'Onshape BOM', 8); return r; }
   catch (e) { SpreadsheetApp.getUi().alert('Onshape BOM sync failed', e.message, SpreadsheetApp.getUi().ButtonSet.OK); throw e; }
 }
