@@ -1,10 +1,10 @@
 // Set this once when deploying the container-bound script.
 const BACKEND_URL = 'https://YOUR-BOM-BACKEND.example.com';
 const BACKEND_API_TOKEN = 'YOUR-BOM-BACKEND-TOKEN';
-
+// hello
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('Onshape BOM')
-    .addItem('Import…', 'showImportSidebar').addItem('Manage vendor listings', 'showVendorCatalog').addItem('Configure columns…', 'showColumnConfig').addItem('Sync now', 'syncNow')
+    .addItem('Import…', 'showImportSidebar').addItem('Manage vendor listings', 'showVendorCatalog').addItem('Configure columns…', 'showColumnConfig').addItem('Sync now', 'syncNow').addItem('Format sheet', 'formatSheetNow')
     .addToUi();
   // Re-apply validation when a configured spreadsheet is reopened.
   try { applyColumnValidation_(); } catch (_) {}
@@ -65,6 +65,11 @@ function importBom(selection) {
   applyColumnValidation_();
   applyVendorDropdowns_();
   return result;
+}
+function formatSheetNow() {
+  const c = getConfiguration();
+  try { backendRequest_('post', '/api/format', { spreadsheetId: c.spreadsheetId, sheetName: c.sheetName }); SpreadsheetApp.getActive().toast('Formatting reapplied.', 'Onshape BOM', 5); }
+  catch (e) { SpreadsheetApp.getUi().alert('Onshape BOM formatting failed', e.message, SpreadsheetApp.getUi().ButtonSet.OK); throw e; }
 }
 function syncNow() {
   const c = getConfiguration();

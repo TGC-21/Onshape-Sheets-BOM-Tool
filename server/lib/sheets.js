@@ -1,5 +1,5 @@
 // server/lib/sheets.js
-//
+// This one is real
 // Google Sheets API access via a service account. No OAuth flow — the
 // target spreadsheet must be shared with the service account's
 // client_email (found in the downloaded JSON key) like any collaborator.
@@ -12,19 +12,32 @@ import { google } from 'googleapis'
 import fs from 'node:fs'
 import { buildHeaderRow, columnLetterToIndex, ONSHAPE_COLUMNS, META_COLUMNS, VENDOR_COLUMNS } from './columnMap.js'
 import { DEFAULT_COLUMN_CONFIG } from './columnConfig.js'
+import { applyBomFormatting } from './formatting.js'
 
 const LEGACY_LAYOUT = { name: 'B', partNumber: 'C', quantity: 'D', level: 'E', parent: 'F', priority: 'G', owner: 'H', vendor: 'I', vendorPartNumber: 'J', purchaseUrl: 'K', price: 'L', availability: 'M', sourceKey: 'Z', contentHash: 'AA', listingId: 'AB', listingSnapshot: 'AC' }
 const labelFor = (id, fallback) => DEFAULT_COLUMN_CONFIG.find((c) => c.id === id)?.label || fallback
 
+// sheets.js
 async function resolveColumnLayout(sheets, spreadsheetId) {
   try {
     const result = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Config!A1' })
     const config = JSON.parse(result.data.values?.[0]?.[0] || '')
-    if (!Array.isArray(config) || !config.length) return LEGACY_LAYOUT
+    if (!Array.isArray(config) || !config.length) return { layout: LEGACY_LAYOUT, labels: null }
     const layout = {}
-    config.filter((c) => c.enabled !== false).forEach((c, index) => { layout[c.id] = index + 2 })
-    return layout
-  } catch { return LEGACY_LAYOUT }
+    const labels = {}
+    config.filter((c) => c.enabled !== false).forEach((c, index) => {
+      layout[c.id] = index + 2
+      labels[c.id] = c.label   // <-- carry the real label through
+    })
+   // Reserve meta columns AFTER whatever the Config tab actually uses,
+    // instead of fixed letters (Z/AA/AB/AC) that a wide custom config
+    // can grow past and collide with.
+    let next = Math.max(...Object.values(layout), 1) + 1
+    for (const id of ['sourceKey', 'contentHash', 'listingId', 'listingSnapshot']) {
+      if (!layout[id]) layout[id] = next++
+    }
+    return { layout, labels }
+  } catch { return { layout: LEGACY_LAYOUT, labels: null } }
 }
 
 function indexFor(layout, id, fallbackLetter) { return layout[id] ?? columnLetterToIndex(fallbackLetter) }
@@ -292,7 +305,49 @@ export async function writeHierarchyBom(spreadsheetId, rows, { sheetName } = {})
     await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } })
   }
 
+  await applyBomFormatting(sheets, spreadsheetId, sheetId, {
+    numColumns: header.length,
+    numRows: values.length + 1,
+    hiddenColumnIndexes: [sourceKeyIdx, contentHashIdx, listingIdIdx, snapshotIdx].filter((i) => i >= 0),
+    quantityColIndex: quantityIdx >= 0 ? quantityIdx : null,
+    priceColIndex: priceIdx >= 0 ? priceIdx : null,
+  })
+
   return { sheetName: title, rowsWritten: values.length, groupsCreated: groupRanges.length }
+}
+
+/**
+ * Reapplies the standard BOM formatting to whatever is currently in the
+ * sheet, without touching any values. Used by the "Format sheet" menu
+ * command — e.g. after reordering columns in the config panel, or if a
+ * user has manually undone some formatting and wants it back.
+ */
+export async function formatBomSheet(spreadsheetId, { sheetName } = {}) {
+  const sheets = await getSheetsClient()
+  const title = await resolveSheetTitle(sheets, spreadsheetId, sheetName)
+  const sheetId = await getSheetIdByTitle(sheets, spreadsheetId, title)
+  const layout = await resolveColumnLayout(sheets, spreadsheetId)
+  const maxColumn = Math.max(...Object.values(layout), columnLetterToIndex(META_COLUMNS.listingSnapshot))
+
+  const read = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${title}!A:${columnIndexToLetter(maxColumn)}` })
+  const numRows = Math.max(read.data.values?.length ?? 1, 1)
+
+  const sourceKeyIdx = indexFor(layout, 'sourceKey', META_COLUMNS.sourceKey) - 1
+  const contentHashIdx = indexFor(layout, 'contentHash', META_COLUMNS.contentHash) - 1
+  const listingIdIdx = indexFor(layout, 'listingId', META_COLUMNS.listingId) - 1
+  const snapshotIdx = indexFor(layout, 'listingSnapshot', META_COLUMNS.listingSnapshot) - 1
+  const quantityIdx = indexFor(layout, 'quantity', ONSHAPE_COLUMNS.quantity) - 1
+  const priceIdx = indexFor(layout, 'price', VENDOR_COLUMNS.price) - 1
+
+  await applyBomFormatting(sheets, spreadsheetId, sheetId, {
+    numColumns: maxColumn,
+    numRows,
+    hiddenColumnIndexes: [sourceKeyIdx, contentHashIdx, listingIdIdx, snapshotIdx].filter((i) => i >= 0),
+    quantityColIndex: quantityIdx >= 0 ? quantityIdx : null,
+    priceColIndex: priceIdx >= 0 ? priceIdx : null,
+  })
+
+  return { sheetName: title }
 }
 
 /** Diff-syncs rows while only writing mapped Onshape/meta cells. User columns
@@ -348,8 +403,18 @@ export async function syncHierarchyBom(spreadsheetId, rows, { sheetName } = {}) 
   const deletes = [...existing.values()].filter((r) => !freshKeys.has(r.values[sourceCol]))
   if (updates.length) await sheets.spreadsheets.values.batchUpdate({ spreadsheetId, requestBody: { valueInputOption: 'RAW', data: updates.map(([range, v]) => ({ range, values: v })) } })
   if (inserts.length) {
-    await sheets.spreadsheets.values.append({ spreadsheetId, range: `${title}!A:AC`, valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS', requestBody: { values: inserts.map((r) => { const out = new Array(29).fill(''); const p = cellsFor(r)[0]; [nameCol,pnCol,qtyCol,levelCol,parentCol,sourceCol,hashCol,vendorCol,vendorPnCol,urlCol,priceCol,availabilityCol,listingIdCol,snapshotCol].forEach((idx, i) => { out[idx] = p[i] }); return out }) } })
+    await sheets.spreadsheets.values.append({ spreadsheetId, range: `${title}!A:${columnIndexToLetter(maxColumn)}`, valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS', requestBody: { values: inserts.map((r) => { const out = new Array(maxColumn).fill(''); const p = cellsFor(r)[0]; [nameCol,pnCol,qtyCol,levelCol,parentCol,sourceCol,hashCol,vendorCol,vendorPnCol,urlCol,priceCol,availabilityCol,listingIdCol,snapshotCol].forEach((idx, i) => { out[idx] = p[i] }); return out }) } })
   }
   if (deletes.length) await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests: deletes.sort((a,b) => b.rowNumber-a.rowNumber).map((r) => ({ deleteDimension: { range: { sheetId, dimension: 'ROWS', startIndex: r.rowNumber - 1, endIndex: r.rowNumber } } })) } })
+
+  const finalRowCount = existing.size + inserts.length - deletes.length + 1 // +1 for header
+  await applyBomFormatting(sheets, spreadsheetId, sheetId, {
+    numColumns: maxColumn,
+    numRows: finalRowCount,
+    hiddenColumnIndexes: [sourceCol, hashCol, listingIdCol, snapshotCol].filter((i) => i >= 0),
+    quantityColIndex: qtyCol >= 0 ? qtyCol : null,
+    priceColIndex: priceCol >= 0 ? priceCol : null,
+  })
+
   return { sheetName: title, rowsUpdated: updates.length / 7, rowsInserted: inserts.length, rowsDeleted: deletes.length, rowsSkipped: rows.length - inserts.length - updates.length / 7 }
 }

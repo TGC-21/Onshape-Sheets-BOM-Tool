@@ -316,7 +316,6 @@ function render(){
 }
 
 function typeChange(i, v){ config[i].type = v; render(); }
-
 function addColumn(){
   const label = prompt('Column name');
   if (!label) return;
@@ -324,13 +323,15 @@ function addColumn(){
   config.push({ id: id || 'custom' + Date.now(), label: label, source: 'user', type: 'checkbox', editable: true, enabled: true });
   render();
 }
-
 function removeColumn(i){ config.splice(i, 1); render(); }
 
 function save(){
   setStatus('Saving…');
+  google.script.run.withSuccessHandler(() => {
+    setStatus('Saved. Reapplying formatting…', 'ok');
   google.script.run.withSuccessHandler(() => setStatus('Saved and applied to the active BOM tab.', 'ok'))
-    .withFailureHandler(fail).saveColumnConfig(config);
+      .withFailureHandler(fail).formatSheetNow();
+  }).withFailureHandler(fail).saveColumnConfig(config);
 }
 
 function resetConfig(){ load(); }

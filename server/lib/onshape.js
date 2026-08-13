@@ -420,12 +420,15 @@ async function resolveBomWithSubassembliesUncached(documentId, workspaceId, elem
       continue
     }
 
-    // "Ours" means the subassembly's Category definition is owned by
-    // the same document currently being walked — i.e. it's part of this
-    // team's own document tree, not a vendor/COTS assembly bundled in
-    // from elsewhere. Recursing into vendor content would produce a BOM
-    // tree nobody wants and burn API calls on data that's never used.
-    const isOurs = documentId !== null && category.documentId !== null && category.documentId === documentId
+    // "Ours" means the subassembly's Category-owning document belongs to
+    // the same *owner* as the root assembly being imported — not the
+    // document currently being walked. Comparing against the current
+    // level misclassifies legitimate cross-document subassemblies within
+    // the same project as vendor/COTS content. Resolved once per import
+    // via fetchDocumentOwnerId's own cache, so this doesn't add an extra
+    // round trip per row.
+    const categoryOwnerId = category.documentId ? await fetchDocumentOwnerId(category.documentId) : null
+    const isOurs = rootOwnerId !== null && categoryOwnerId !== null && categoryOwnerId === rootOwnerId
 
     if (!isOurs) {
       directParts.push({ ...parsed, ref: { ...row.itemSource, documentId: row.itemSource?.documentId || documentId, wvmType: row.itemSource?.wvmType || 'w', wvmId: row.itemSource?.wvmId || workspaceId, elementId: row.itemSource?.elementId || elementId } })
@@ -483,39 +486,65 @@ export async function buildHierarchyRows(documentId, workspaceId, elementId, wvm
   const rootOwnerId = await fetchDocumentOwnerId(documentId)
   const resolveCache = new Map()
   let rowCounter = 0
-  const rows = []
-
+ 
+  // Runs `items` through `worker` with at most MAX_ONSHAPE_CONCURRENCY
+  // in flight at once. `worker` returns a value per item; results are
+  // returned in original `items` order (not completion order).
+  async function mapWithConcurrencyLimit(items, worker) {
+    const results = new Array(items.length)
+    let cursor = 0
+    async function next() {
+      while (cursor < items.length) {
+        const index = cursor++
+        results[index] = await worker(items[index], index)
+      }
+    }
+    const workerCount = Math.min(MAX_ONSHAPE_CONCURRENCY, items.length)
+    await Promise.all(Array.from({ length: workerCount }, next))
+    return results
+  }
+ 
+  // Returns this subtree's rows (own direct parts + subassembly summary
+  // rows + recursively-fetched children), instead of mutating a shared
+  // array — that's what makes concurrent sibling fetches safe to
+  // reorder back into place afterward.
   async function walk(docId, wsId, elId, wvm, level, parentRowId) {
     if (level > MAX_CHILD_DEPTH) {
       const bomData = await fetchFlatBom(docId, wsId, elId, wvm)
       const { parts } = parseFlatBomRows(bomData)
-      for (const p of parts) {
-        rows.push({ ...p, level, parentRowId, rowId: `r${rowCounter++}`, isSubassembly: false,
-          ref: p.ref ?? { documentId: docId, wvmType: wvm, wvmId: wsId, elementId: elId } })
-      }
-      return
+      return parts.map((p) => ({
+        ...p, level, parentRowId, rowId: `r${rowCounter++}`, isSubassembly: false,
+        ref: p.ref ?? { documentId: docId, wvmType: wvm, wvmId: wsId, elementId: elId },
+      }))
     }
-
+ 
     const { directParts, subassemblies } = await resolveBomWithSubassemblies(
       docId, wsId, elId, wvm, rootOwnerId, STANDARD_BOM_COLUMN_IDS, resolveCache
     )
-
-    for (const p of directParts) {
-      rows.push({ ...p, level, parentRowId, rowId: `r${rowCounter++}`, isSubassembly: false,
-        ref: p.ref ?? { documentId: docId, wvmType: wvm, wvmId: wsId, elementId: elId } })
-    }
-
-    for (const s of subassemblies) {
-      const rowId = `r${rowCounter++}`
-      rows.push({
-        partName: s.partName, partNumber: s.partNumber, quantity: s.quantity,
-        level, parentRowId, rowId, isSubassembly: true,
-        ref: s.ref,
-      })
-      await walk(s.resolvedDocumentId, s.resolvedWorkspaceId, s.resolvedElementId, s.resolvedWvmType, level + 1, rowId)
-    }
+ 
+    const own = directParts.map((p) => ({
+      ...p, level, parentRowId, rowId: `r${rowCounter++}`, isSubassembly: false,
+      ref: p.ref ?? { documentId: docId, wvmType: wvm, wvmId: wsId, elementId: elId },
+    }))
+ 
+    // Assign each subassembly's summary row id up front, in order, so
+    // rowCounter/rowId assignment stays deterministic across runs
+    // regardless of fetch completion order.
+    const summaryRows = subassemblies.map((s) => ({
+      partName: s.partName, partNumber: s.partNumber, quantity: s.quantity,
+      level, parentRowId, rowId: `r${rowCounter++}`, isSubassembly: true, ref: s.ref,
+    }))
+ 
+    // Fetch every child subtree with bounded concurrency (the slow
+    // part — network I/O) but keep results indexed by original sibling
+    // position, not completion order.
+    const childSubtrees = await mapWithConcurrencyLimit(subassemblies, (s, i) =>
+      walk(s.resolvedDocumentId, s.resolvedWorkspaceId, s.resolvedElementId, s.resolvedWvmType, level + 1, summaryRows[i].rowId)
+    )
+ 
+    const nested = summaryRows.flatMap((summaryRow, i) => [summaryRow, ...childSubtrees[i]])
+    return [...own, ...nested]
   }
-
-  await walk(documentId, workspaceId, elementId, wvmType, 0, null)
-  return rows
+ 
+  return walk(documentId, workspaceId, elementId, wvmType, 0, null)
 }

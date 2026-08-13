@@ -1,5 +1,5 @@
 // server/index.js — app entry point.
-//
+// This is real
 // Phase 0: server skeleton + /api/health.
 // Phase 1: /api/onshape/documents and /api/onshape/elements.
 //
@@ -15,6 +15,7 @@ import onshapeLookup from './routes/onshape-lookup.js'
 import importRoute from './routes/import.js'
 import syncRoute from './routes/sync.js'
 import catalogRoute from './routes/catalog.js'
+import formatRoute from './routes/format.js'
 
 const app = new Hono()
 
@@ -30,6 +31,7 @@ app.route('/api/onshape', onshapeLookup)
 app.route('/api/import', importRoute)
 app.route('/api/sync', syncRoute)
 app.route('/api/catalog', catalogRoute)
+app.route('/api/format', formatRoute)
 
 const port = parseInt(process.env.PORT, 10) || 8787
 

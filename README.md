@@ -74,7 +74,9 @@ stored in hidden columns `Z` and `AA`.
    updated, new rows appended, and missing tracked rows deleted.
 
 ## Future work
-
+- `apps-script/Code.gs`'s `defaultColumnConfig_()` is a hand-maintained
+  copy of `server/lib/columnConfig.js`'s `DEFAULT_COLUMN_CONFIG` — keep
+  them in sync manually until Config-tab generation is unified.
 - Config tab for column mapping.
 - Column configuration groundwork via `Onshape BOM → Configure columns…`.
   Full backend-driven reordering remains pending until the shared config

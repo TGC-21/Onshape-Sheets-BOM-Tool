@@ -7,6 +7,7 @@ export const DEFAULT_COLUMN_CONFIG = [
   { id: 'priority', label: 'Priority', source: 'user', type: 'dropdown', options: ['Low', 'Medium', 'High'], editable: true },
   { id: 'owner', label: 'Owner', source: 'user', type: 'dropdown', options: [], editable: true },
   { id: 'purchased', label: 'Purchased', source: 'user', type: 'checkbox', editable: true },
+  { id: 'inInventory', label: 'In Inventory?', source: 'user', type: 'checkbox', editable: true },
   { id: 'vendor', label: 'Vendor', source: 'vendor', field: 'vendor', type: 'text', editable: false },
   { id: 'vendorPartNumber', label: 'Vendor Part Number', source: 'vendor', field: 'vendorPartNumber', type: 'text', editable: false },
   { id: 'purchaseUrl', label: 'Purchase URL', source: 'vendor', field: 'purchaseUrl', type: 'url', editable: false },
