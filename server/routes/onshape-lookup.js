@@ -25,19 +25,19 @@ onshapeLookup.get('/account-scope', async (c) => {
 onshapeLookup.get('/documents', async (c) => {
   const q = (c.req.query('q') || '').trim()
   const limit = Math.min(parseInt(c.req.query('limit'), 10) || 20, 20)
+  const requestedScope = c.req.query('scope') || 'owned'
   try {
-    const params = new URLSearchParams({
-      limit: String(limit),
-      sortColumn: 'modifiedAt',
-      sortOrder: 'desc',
-    })
-    if (q) params.set('q', q)
-
-    const data = await onshapeGet(`/documents?${params.toString()}`)
     const scope = await getOnshapeAccountScope()
-    const ownerIds = new Set([scope.user.id, ...scope.organizations.map((org) => org.id)].filter(Boolean))
-    const scopeKnown = ownerIds.size > 0
-    const documents = (data.items ?? [])
+    const targets = requestedScope === 'organization' ? scope.organizations.map((org) => ({ id: org.id, type: org.type })) : requestedScope === 'mine' ? [{ id: scope.user.id, type: 'user' }] : [{ id: scope.user.id, type: 'user' }, ...scope.organizations.map((org) => ({ id: org.id, type: org.type }))]
+    const results = await Promise.all(targets.filter((target) => target.id).map(async (target) => {
+      const params = new URLSearchParams({ limit: String(limit), sortColumn: 'modifiedAt', sortOrder: 'desc', owner: target.id })
+      if (q) params.set('q', q)
+      if (target.type !== 'user') { params.set('filter', '7'); params.set('ownerType', '1') }
+      const data = await onshapeGet(`/documents?${params.toString()}`)
+      return data.items ?? []
+    }))
+    const ownerIds = new Set(targets.map((target) => target.id).filter(Boolean))
+    const documents = results.flat()
       .map((doc) => ({
         id: doc.id,
         name: doc.name,
@@ -52,9 +52,9 @@ onshapeLookup.get('/documents', async (c) => {
       // endpoint's 'w' branch downstream — drop it here rather than
       // making the frontend/Apps Script side re-check this.
       .filter((d) => d.workspaceId)
-      .filter((d) => !scopeKnown || (d.ownerId && ownerIds.has(d.ownerId)))
+      .filter((d, index, all) => d.ownerId && ownerIds.has(d.ownerId) && all.findIndex((candidate) => candidate.id === d.id) === index)
 
-    return c.json({ documents, query: q || null, scope: { ...scope, filteringApplied: scopeKnown } })
+    return c.json({ documents, query: q || null, scope: { ...scope, requested: requestedScope, filteringApplied: true } })
   } catch (err) {
     console.error('[onshape-lookup:documents]', err)
     return c.json({ error: err.message ?? 'Internal server error' }, 500)

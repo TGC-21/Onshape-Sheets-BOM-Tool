@@ -156,6 +156,7 @@
 
   <span class="field-label">Document</span>
   <div class="search-row">
+    <select id="scope"><option value="owned">My + organization documents</option><option value="mine">My documents</option><option value="organization">Organization documents</option></select>
     <input id="query" placeholder="Document name…">
     <button class="btn-primary" onclick="search()">Search</button>
   </div>
@@ -187,7 +188,7 @@ function fail(e){ setStatus('Error: ' + (e.message || e), 'error'); }
 function search(){
   const q = document.getElementById('query').value;
   busy('Searching…');
-  google.script.run.withSuccessHandler(showDocuments).withFailureHandler(fail).searchDocuments(q, 25);
+  google.script.run.withSuccessHandler(showDocuments).withFailureHandler(fail).searchDocuments(q, 25, document.getElementById('scope').value);
 }
 
 function showDocuments(data){

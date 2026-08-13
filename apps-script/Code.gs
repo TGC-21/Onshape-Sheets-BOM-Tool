@@ -35,7 +35,7 @@ function backendRequest_(method, path, body) {
   if (response.getResponseCode() < 200 || response.getResponseCode() >= 300) throw new Error(result.error || ('Backend request failed (' + response.getResponseCode() + ').'));
   return result;
 }
-function searchDocuments(query, limit) { return backendRequest_('get', '/api/onshape/documents?q=' + encodeURIComponent(query || '') + '&limit=' + (limit || 25)); }
+function searchDocuments(query, limit, scope) { return backendRequest_('get', '/api/onshape/documents?q=' + encodeURIComponent(query || '') + '&limit=' + (limit || 25) + '&scope=' + encodeURIComponent(scope || 'owned')); }
 function listAssemblies(documentId, workspaceId) { return backendRequest_('get', '/api/onshape/elements?documentId=' + encodeURIComponent(documentId) + '&workspaceId=' + encodeURIComponent(workspaceId)); }
 function getVendorCatalog() { return backendRequest_('get', '/api/catalog'); }
 function saveVendorPart(part) { return backendRequest_('post', '/api/catalog', part); }
