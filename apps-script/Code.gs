@@ -56,7 +56,9 @@ function backendRequest_(method, path, body) {
 }
 function searchDocuments(query, limit, scope) { return backendRequest_('get', '/api/onshape/documents?q=' + encodeURIComponent(query || '') + '&limit=' + (limit || 25) + '&scope=' + encodeURIComponent(scope || 'owned')); }
 function listAssemblies(documentId, workspaceId) { return backendRequest_('get', '/api/onshape/elements?documentId=' + encodeURIComponent(documentId) + '&workspaceId=' + encodeURIComponent(workspaceId)); }
-function getVendorCatalog() { return backendRequest_('get', '/api/catalog'); }
+function getVendorCatalog(search, limit, offset) {
+  return backendRequest_('get', '/api/catalog?search=' + encodeURIComponent(search || '') + '&limit=' + (limit || 50) + '&offset=' + (offset || 0));
+}
 function saveVendorPart(part) { return backendRequest_('post', '/api/catalog', part); }
 function deleteVendorListing(id) { return backendRequest_('delete', '/api/catalog/listings/' + encodeURIComponent(id)); }
 function importVendorCsv(rows) { return backendRequest_('post', '/api/catalog/csv', { rows: rows }); }

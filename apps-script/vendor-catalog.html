@@ -76,6 +76,8 @@
 
   .search-row{display:flex;gap:8px;margin-bottom:10px}
   .search-row input{flex:1;min-width:0}
+  .pagination{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px}
+  .pagination .page-label{color:var(--sub);font-size:11.5px}
 
   button{
     font:inherit;font-weight:600;padding:8px 14px;border:1px solid var(--line);
@@ -144,10 +146,15 @@
 
   <div class="panel active" id="panel-browse">
     <div class="search-row">
-      <input id="filter" placeholder="Filter by part number or vendor…" oninput="renderList()">
+      <input id="filter" placeholder="Filter by part number, description, or vendor…">
       <button class="btn-primary" onclick="loadCatalog()">Reload</button>
     </div>
     <div class="card-list" id="list"></div>
+    <div class="pagination">
+      <button class="btn-sm" id="previousPage" onclick="changePage(-1)" disabled>Previous</button>
+      <span class="page-label" id="pageLabel"></span>
+      <button class="btn-sm" id="nextPage" onclick="changePage(1)" disabled>Next</button>
+    </div>
   </div>
 
   <div class="panel" id="panel-edit">
@@ -197,6 +204,10 @@
 
 <script>
 let catalog = [];
+const PAGE_SIZE = 50;
+let page = 0;
+let hasNextPage = false;
+let searchTimer = null;
 
 function showTab(name){
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
@@ -212,21 +223,26 @@ function busy(text){ setStatus(text, 'busy'); }
 function fail(e){ setStatus('Error: ' + (e.message || e), 'error'); }
 
 function loadCatalog(){
+  const search = (document.getElementById('filter').value || '').trim();
   busy('Loading vendor catalog…');
   google.script.run.withSuccessHandler(data => {
     catalog = data.parts || data || [];
+    if (!catalog.length && page > 0) {
+      page--;
+      loadCatalog();
+      return;
+    }
+    hasNextPage = catalog.length === PAGE_SIZE;
     renderList();
+    updatePagination();
     setStatus(catalog.length + ' part(s) loaded.', 'ok');
-  }).withFailureHandler(fail).getVendorCatalog();
+  }).withFailureHandler(fail).getVendorCatalog(search, PAGE_SIZE, page * PAGE_SIZE);
 }
 
 function renderList(){
-  const q = (document.getElementById('filter').value || '').toLowerCase();
   const list = document.getElementById('list');
   list.innerHTML = '';
   catalog
-    .filter(p => !q || (p.canonicalPartNumber || '').toLowerCase().includes(q) ||
-      (p.listings || []).some(l => (l.vendorName || '').toLowerCase().includes(q)))
     .forEach(p => {
       const card = document.createElement('div');
       card.className = 'part-card';
@@ -247,6 +263,24 @@ function renderList(){
       });
       list.appendChild(card);
     });
+}
+
+function updatePagination(){
+  document.getElementById('previousPage').disabled = page === 0;
+  document.getElementById('nextPage').disabled = !hasNextPage;
+  document.getElementById('pageLabel').textContent = 'Page ' + (page + 1);
+}
+
+function changePage(delta){
+  const nextPage = page + delta;
+  if (nextPage < 0 || (delta > 0 && !hasNextPage)) return;
+  page = nextPage;
+  loadCatalog();
+}
+
+function scheduleSearch(){
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { page = 0; loadCatalog(); }, 250);
 }
 
 function deleteListing(id, part){
@@ -391,6 +425,7 @@ function importCsv(){
 
 function esc(x){ return String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+document.getElementById('filter').addEventListener('input', scheduleSearch);
 loadCatalog();
 </script>
 </body>

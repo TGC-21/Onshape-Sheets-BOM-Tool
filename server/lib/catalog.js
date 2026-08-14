@@ -98,6 +98,8 @@ export async function listCatalog({
                 $1 = ''
                 OR p.canonical_part_number ILIKE $2
                 OR p.description ILIKE $2
+                OR v.vendor_name ILIKE $2
+                OR v.vendor_part_number ILIKE $2
             )
             GROUP BY p.id
             ORDER BY p.canonical_part_number
