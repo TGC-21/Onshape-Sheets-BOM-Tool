@@ -23,6 +23,7 @@ const MIN_COLUMN_WIDTHS = {
   name: 220, partNumber: 150, quantity: 80, level: 60, parent: 170,
   vendor: 150, vendorPartNumber: 170, purchaseUrl: 220, price: 90, availability: 130,
 }
+const vendorLabel = (v) => (v?.vendorName && v?.vendorPartNumber) ? `${v.vendorName} — ${v.vendorPartNumber}` : (v?.vendorName ?? '')
 
 function buildColumnWidthRequests(layout) {
   return Object.entries(MIN_COLUMN_WIDTHS)
@@ -276,7 +277,21 @@ export async function writeHierarchyBom(spreadsheetId, rows, { sheetName } = {})
   const listingIdIdx = indexFor(layout, 'listingId', META_COLUMNS.listingId) - 1
   const snapshotIdx = indexFor(layout, 'listingSnapshot', META_COLUMNS.listingSnapshot) - 1
   const header = new Array(Math.max(...Object.values(layout), columnLetterToIndex(META_COLUMNS.listingSnapshot))).fill('')
-  const metaLabels = { sourceKey: 'Source Key (hidden — do not edit)', contentHash: 'Content Hash (hidden — do not edit)', listingId: 'Listing Id (hidden — do not edit)', listingSnapshot: 'Listing Snapshot (hidden — do not edit)', vendor: 'Vendor', vendorPartNumber: 'Vendor Part Number', purchaseUrl: 'Purchase URL', price: 'Price', availability: 'Availability', name: 'Name', partNumber: 'Part Number', quantity: 'Quantity', level: 'Level', parent: 'Parent' }
+  const metaLabels = { 
+    sourceKey: 'Source Key (hidden — do not edit)', 
+    contentHash: 'Content Hash (hidden — do not edit)', 
+    listingId: 'Listing Id (hidden — do not edit)', 
+    listingSnapshot: 'Listing Snapshot (hidden — do not edit)', 
+    vendor: 'Vendor', vendorPartNumber: 'Vendor Part Number', 
+    purchaseUrl: 'Purchase URL', 
+    price: 'Price', 
+    availability: 'Availability', 
+    name: 'Name', 
+    partNumber: 'Part Number', 
+    quantity: 'Quantity', 
+    level: 'Level', 
+    parent: 'Parent' 
+  }
   const effectiveLabels = labels ? { ...metaLabels, ...labels } : metaLabels
   Object.entries(effectiveLabels).forEach(([id, label]) => { const index = indexFor(layout, id, LEGACY_LAYOUT[id]) - 1; if (index >= 0 && index < header.length) header[index] = label })
   
@@ -290,7 +305,13 @@ export async function writeHierarchyBom(spreadsheetId, rows, { sheetName } = {})
     row[sourceKeyIdx] = r.sourceKey ?? ''
     row[contentHashIdx] = r.contentHash ?? ''
     const v = r.vendorListing
-    if (v) { row[vendorIdx] = v.vendorName; row[vendorPnIdx] = v.vendorPartNumber; row[urlIdx] = v.purchaseUrl ?? ''; row[priceIdx] = v.latestPrice ?? ''; row[availabilityIdx] = v.active === false ? 'Unavailable' : (v.availability ?? ''); row[listingIdIdx] = v.id; row[snapshotIdx] = r.vendorSnapshot }
+    if (v) { 
+      row[vendorIdx] = vendorLabel(v); row[vendorPnIdx] = v.vendorPartNumber;
+     row[urlIdx] = v.purchaseUrl ?? '';
+     row[priceIdx] = v.latestPrice ?? '';
+     row[availabilityIdx] = v.active === false ? 'Unavailable' : (v.availability ?? ''); row[listingIdIdx] = v.id;
+     row[snapshotIdx] = r.vendorSnapshot 
+    }
     return row
   })
 
@@ -396,7 +417,25 @@ export async function syncHierarchyBom(spreadsheetId, rows, { sheetName } = {}) 
   const urlCol = indexFor(layout, 'purchaseUrl', VENDOR_COLUMNS.purchaseUrl) - 1
   const priceCol = indexFor(layout, 'price', VENDOR_COLUMNS.price) - 1
   const availabilityCol = indexFor(layout, 'availability', VENDOR_COLUMNS.availability) - 1
-  const cellsFor = (r) => { const v=r.vendorListing; return [[r.isSubassembly ? `${r.partName} (assembly)` : r.partName, r.partNumber, r.quantity, r.level, r.parentLabel ?? '', r.sourceKey, r.contentHash, v?.vendorName ?? '', v?.vendorPartNumber ?? '', v?.purchaseUrl ?? '', v?.latestPrice ?? '', v?.availability ?? '', v?.id ?? '', r.vendorSnapshot ?? '']] }
+  const cellsFor = (r) => { 
+    const v = r.vendorListing;
+    return [
+      [r.isSubassembly ? `${r.partName} (assembly)` : r.partName, 
+        r.partNumber, 
+        r.quantity, 
+        r.level, 
+        r.parentLabel ?? '', 
+        r.sourceKey, 
+        r.contentHash, 
+        vendorLabel(v), 
+        v?.vendorPartNumber ?? '', 
+        v?.purchaseUrl ?? '', 
+        v?.latestPrice ?? '', 
+        v?.availability ?? '', 
+        v?.id ?? '', 
+        r.vendorSnapshot ?? ''
+      ]]
+   }
   for (const row of rows) {
     const found = existing.get(row.sourceKey)
     if (!found) inserts.push(row)
@@ -416,7 +455,18 @@ export async function syncHierarchyBom(spreadsheetId, rows, { sheetName } = {}) 
   const deletes = [...existing.values()].filter((r) => !freshKeys.has(r.values[sourceCol]))
   if (updates.length) await sheets.spreadsheets.values.batchUpdate({ spreadsheetId, requestBody: { valueInputOption: 'RAW', data: updates.map(([range, v]) => ({ range, values: v })) } })
   if (inserts.length) {
-    await sheets.spreadsheets.values.append({ spreadsheetId, range: `${title}!A:${columnIndexToLetter(maxColumn)}`, valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS', requestBody: { values: inserts.map((r) => { const out = new Array(maxColumn).fill(''); const p = cellsFor(r)[0]; [nameCol,pnCol,qtyCol,levelCol,parentCol,sourceCol,hashCol,vendorCol,vendorPnCol,urlCol,priceCol,availabilityCol,listingIdCol,snapshotCol].forEach((idx, i) => { out[idx] = p[i] }); return out }) } })
+    await sheets.spreadsheets.values.append({ 
+      spreadsheetId, 
+      range: `${title}!A:${columnIndexToLetter(maxColumn)}`, 
+      valueInputOption: 'RAW', 
+      insertDataOption: 'INSERT_ROWS', 
+      requestBody: { values: inserts.map((r) => { const out = new Array(maxColumn).fill(''); 
+        const p = cellsFor(r)[0]; 
+        [nameCol,pnCol,qtyCol,levelCol,parentCol,sourceCol,hashCol,vendorCol,vendorPnCol,urlCol,priceCol,availabilityCol,listingIdCol,snapshotCol].forEach((idx, i) => { out[idx] = p[i] }); 
+        return out 
+      }) 
+    } 
+  })
   }
   if (deletes.length) await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests: deletes.sort((a,b) => b.rowNumber-a.rowNumber).map((r) => ({ deleteDimension: { range: { sheetId, dimension: 'ROWS', startIndex: r.rowNumber - 1, endIndex: r.rowNumber } } })) } })
 
