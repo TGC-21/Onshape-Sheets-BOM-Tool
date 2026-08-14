@@ -538,6 +538,7 @@ export async function buildHierarchyRows(documentId, workspaceId, elementId, wvm
   // reorder back into place afterward.
   async function walk(docId, wsId, elId, wvm, level, parentRowId) {
     if (level > MAX_CHILD_DEPTH) {
+      trackFetch()
       const bomData = await fetchFlatBom(docId, wsId, elId, wvm)
       const { parts } = parseFlatBomRows(bomData)
       return parts.map((p) => ({
@@ -546,6 +547,7 @@ export async function buildHierarchyRows(documentId, workspaceId, elementId, wvm
       }))
     }
  
+    trackFetch()
     const { directParts, subassemblies } = await resolveBomWithSubassemblies(
       docId, wsId, elId, wvm, rootOwnerId, STANDARD_BOM_COLUMN_IDS, resolveCache
     )

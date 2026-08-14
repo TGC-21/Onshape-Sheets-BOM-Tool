@@ -212,6 +212,7 @@ export async function upsertCatalogPart(input) {
                         is_default = EXCLUDED.is_default,
                         active = EXCLUDED.active,
                         updated_at = now()
+                    RETURNING id
                 `,
                 [
                     part.id,
