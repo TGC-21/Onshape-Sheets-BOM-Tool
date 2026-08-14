@@ -105,6 +105,8 @@
   }
   .listing-row .vname{color:var(--ink);font-weight:600}
   .listing-row .price{color:var(--accent);font-weight:600;white-space:nowrap}
+  .listing-row .listing-info{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .listing-row .delete-listing{flex:0 0 auto;color:var(--danger);border-color:transparent;background:transparent}
   .badge{
     display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
     padding:1px 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent);margin-left:6px;
@@ -229,17 +231,32 @@ function renderList(){
       const card = document.createElement('div');
       card.className = 'part-card';
       const listings = p.listings || [];
-      const def = listings.find(l => l.isDefault) || listings[0];
       card.innerHTML =
         '<div class="pn">' + esc(p.canonicalPartNumber) +
         (p.vendorAgnostic ? '<span class="badge">Any vendor</span>' : '') +
         (p.vendorUnknown ? '<span class="badge">Unknown vendor</span>' : '') + '</div>' +
         (p.description ? '<div class="desc">' + esc(p.description) + '</div>' : '') +
-        (def ? '<div class="listing-row"><span class="vname">' + esc(def.vendorName) + '</span>' +
-          '<span class="price">' + (def.latestPrice != null ? esc(def.currency || 'USD') + ' ' + esc(def.latestPrice) : '') + '</span></div>' : '');
+        listings.map(l => '<div class="listing-row"><span class="listing-info"><span class="vname">' +
+          esc(l.vendorName) + '</span> — ' + esc(l.vendorPartNumber) +
+          (l.isDefault ? '<span class="badge">Default</span>' : '') +
+          (l.latestPrice != null ? ' <span class="price">' + esc(l.currency || 'USD') + ' ' + esc(l.latestPrice) + '</span>' : '') +
+          '</span><button class="btn-sm delete-listing" data-listing-id="' + esc(l.id) + '" title="Delete listing">Delete</button></div>').join('');
       card.onclick = () => editPart(p);
+      card.querySelectorAll('.delete-listing').forEach(button => {
+        button.onclick = event => { event.stopPropagation(); deleteListing(button.dataset.listingId, p); };
+      });
       list.appendChild(card);
     });
+}
+
+function deleteListing(id, part){
+  const label = part.canonicalPartNumber + ' / ' + ((part.listings || []).find(l => String(l.id) === String(id)) || {}).vendorPartNumber;
+  if (!confirm('Delete vendor listing ' + label + '? This cannot be undone.')) return;
+  busy('Deleting listing…');
+  google.script.run.withSuccessHandler(() => {
+    setStatus('Vendor listing deleted.', 'ok');
+    loadCatalog();
+  }).withFailureHandler(fail).deleteVendorListing(id);
 }
 
 function editPart(p){

@@ -246,6 +246,25 @@ export async function upsertCatalogPart(input) {
         client.release()
     } 
 }
+
+export async function deleteVendorListing(id) {
+    const listingId = Number(id)
+    if (!Number.isSafeInteger(listingId) || listingId <= 0) {
+        throw new Error('A valid vendor listing id is required.')
+    }
+
+    const { rowCount } = await db().query(
+        'DELETE FROM vendor_listings WHERE id = $1',
+        [listingId]
+    )
+
+    if (!rowCount) {
+        throw new Error('Vendor listing not found.')
+    }
+
+    cache.clear()
+    return { id: listingId }
+}
  
 export async function findListing(partNumber) {
     const v = normalize(partNumber);
