@@ -253,17 +253,39 @@ export async function deleteVendorListing(id) {
         throw new Error('A valid vendor listing id is required.')
     }
 
-    const { rowCount } = await db().query(
-        'DELETE FROM vendor_listings WHERE id = $1',
-        [listingId]
-    )
+    const client = await db().connect()
+    try {
+        await client.query('BEGIN')
 
-    if (!rowCount) {
-        throw new Error('Vendor listing not found.')
+        const deleted = await client.query(
+            'DELETE FROM vendor_listings WHERE id = $1 RETURNING catalog_part_id',
+            [listingId]
+        )
+
+        if (!deleted.rowCount) {
+            throw new Error('Vendor listing not found.')
+        }
+
+        const catalogPartId = deleted.rows[0].catalog_part_id
+        const removedPart = await client.query(
+            `DELETE FROM catalog_parts p
+             WHERE p.id = $1
+               AND NOT EXISTS (
+                   SELECT 1 FROM vendor_listings v
+                   WHERE v.catalog_part_id = p.id
+               )`,
+            [catalogPartId]
+        )
+
+        await client.query('COMMIT')
+        cache.clear()
+        return { id: listingId, partDeleted: !!removedPart.rowCount }
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
     }
-
-    cache.clear()
-    return { id: listingId }
 }
  
 export async function findListing(partNumber) {
