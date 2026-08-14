@@ -45,6 +45,8 @@ export function buildFormattingRequests({
   quantityColIndex = null,
   priceColIndex = null,
   existingBandedRangeIds = [],
+  columnWidths = [],
+  trimRowsTo = null
 }) {
   const requests = []
 
@@ -52,6 +54,15 @@ export function buildFormattingRequests({
   // adding a fresh one sized to the current row count.
   for (const bandedRangeId of existingBandedRangeIds) {
     requests.push({ deleteBanding: { bandedRangeId } })
+  }
+
+  if (trimRowsTo != null) {
+    requests.push({
+      updateSheetProperties: {
+        properties: { sheetId, gridProperties: { rowCount: Math.max(trimRowsTo, 1) } },
+        fields: 'gridProperties.rowCount',
+      },
+    })
   }
 
   // Freeze the header row.
@@ -148,6 +159,18 @@ export function buildFormattingRequests({
       dimensions: { sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: numColumns },
     },
   })
+
+    // Explicit minimum widths for columns whose header/content autosize
+  // tends to underestimate — applied after autoResize so these win.
+  for (const { index, pixelSize } of columnWidths) {
+    requests.push({
+      updateDimensionProperties: {
+        range: { sheetId, dimension: 'COLUMNS', startIndex: index, endIndex: index + 1 },
+        properties: { pixelSize },
+        fields: 'pixelSize',
+      },
+    })
+  }
 
   // Hide the meta/helper columns instead of just labeling them.
   for (const colIndex of hiddenColumnIndexes) {

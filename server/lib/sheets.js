@@ -16,8 +16,21 @@ import { applyBomFormatting } from './formatting.js'
 
 const LEGACY_LAYOUT = { name: 'B', partNumber: 'C', quantity: 'D', level: 'E', parent: 'F', priority: 'G', owner: 'H', vendor: 'I', vendorPartNumber: 'J', purchaseUrl: 'K', price: 'L', availability: 'M', sourceKey: 'Z', contentHash: 'AA', listingId: 'AB', listingSnapshot: 'AC' }
 const labelFor = (id, fallback) => DEFAULT_COLUMN_CONFIG.find((c) => c.id === id)?.label || fallback
+// Minimum pixel widths, keyed by the same column ids used in `layout`.
+// autoResizeDimensions alone tends to clip these (esp. Vendor Part
+// Number / Purchase URL headers, and Name for longer part names).
+const MIN_COLUMN_WIDTHS = {
+  name: 220, partNumber: 150, quantity: 80, level: 60, parent: 170,
+  vendor: 150, vendorPartNumber: 170, purchaseUrl: 220, price: 90, availability: 130,
+}
 
-// sheets.js
+function buildColumnWidthRequests(layout) {
+  return Object.entries(MIN_COLUMN_WIDTHS)
+    .filter(([id]) => layout[id] != null || LEGACY_LAYOUT[id] != null)
+    .map(([id, pixelSize]) => ({ index: indexFor(layout, id, LEGACY_LAYOUT[id]) - 1, pixelSize }))
+}
+
+
 async function resolveColumnLayout(sheets, spreadsheetId) {
   try {
     const result = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Config!A1' })
@@ -309,6 +322,8 @@ export async function writeHierarchyBom(spreadsheetId, rows, { sheetName } = {})
     hiddenColumnIndexes: [sourceKeyIdx, contentHashIdx, listingIdIdx, snapshotIdx].filter((i) => i >= 0),
     quantityColIndex: quantityIdx >= 0 ? quantityIdx : null,
     priceColIndex: priceIdx >= 0 ? priceIdx : null,
+    columnWidths: buildColumnWidthRequests(layout),
+    trimRowsTo: values.length + 1,
   })
 
   return { sheetName: title, rowsWritten: values.length, groupsCreated: groupRanges.length }
