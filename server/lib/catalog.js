@@ -6,17 +6,29 @@ import { normalize } from './partNumber.js';
 
 let pool;
 
-const cache = new Map();
+const MAX_CACHE_ENTRIES = 2000
+const CACHE_TTL_MS = 10 * 60 * 1000
+const cache = new Map() // key -> { value, cachedAt }
+
+function cacheGet(key) {
+  const entry = cache.get(key)
+  if (!entry) return undefined
+  if (Date.now() - entry.cachedAt > CACHE_TTL_MS) { cache.delete(key); return undefined }
+  cache.delete(key); cache.set(key, entry) // bump recency
+  return entry.value
+}
+function cacheSet(key, value) {
+  if (cache.size >= MAX_CACHE_ENTRIES) cache.delete(cache.keys().next().value)
+  cache.set(key, { value, cachedAt: Date.now() })
+}
 
 function db() {
-    if (!pool) {
-        if (!process.env.DATABASE_URL) {
-            throw new Error(
-                'DATABASE_URL must be configured for the vendor catalog.'
-            );
-        }
-
-        pool = new Pool({
+  if (!pool) {
+     if (!process.env.DATABASE_URL) {
+       throw new Error('DATABASE_URL must be configured for the vendor catalog.');
+     }
+     
+     pool = new Pool({
             connectionString: process.env.DATABASE_URL,
             ssl:
                 process.env.DATABASE_SSL === 'true'
@@ -25,7 +37,7 @@ function db() {
         });
     }
 
-    return pool;
+  return pool;
 }
 
 export async function initCatalog() {
@@ -55,8 +67,7 @@ export async function listCatalog({
 } = {}) {
     const { rows } = await db().query(
         `
-            SELECT
-                p.*,
+            SELECT p.*,
                 COALESCE(
                     json_agg(DISTINCT a.alias)
                     FILTER (WHERE a.id IS NOT NULL),
@@ -164,7 +175,7 @@ export async function upsertCatalogPart(input) {
                 continue;
             }
 
-            await client.query(
+            const listingResult = await client.query(
                 `
                     INSERT INTO vendor_listings (
                         catalog_part_id,
@@ -217,24 +228,9 @@ export async function upsertCatalogPart(input) {
 
             if (x.isDefault) {
                 await client.query(
-                    `
-                        UPDATE vendor_listings
-                        SET is_default = false
-                        WHERE catalog_part_id = $1
-                          AND id <> (
-                              SELECT id
-                              FROM vendor_listings
-                              WHERE catalog_part_id = $1
-                                AND vendor_name = $2
-                                AND vendor_part_number = $3
-                          )
-                    `,
-                    [
-                        part.id,
-                        x.vendorName,
-                        x.vendorPartNumber,
-                    ]
-                );
+                    `UPDATE vendor_listings SET is_default = false WHERE catalog_part_id = $1 AND id <> $2`,
+                    [part.id, listingResult.rows[0].id]
+                )
             }
         }
 
@@ -295,8 +291,9 @@ export async function findListings(partNumber) {
         return [];
     }
 
-    if (cache.has(v)) {
-        return cache.get(v);
+    const cached = cacheGet(v);
+    if (cached !== undefined) {
+        return cached;
     }
 
     const { rows } = await db().query(
@@ -327,7 +324,7 @@ export async function findListings(partNumber) {
         [v]
     );
 
-    cache.set(v, rows);
+    cacheSet(v, rows);
 
     return rows;
 }

@@ -219,6 +219,7 @@
 <div id="status" class="status"></div>
 <script>
 let config = [];
+let dragIndex = null;
 
 function load(){
   document.getElementById('columns').innerHTML = '<div class="empty-msg">Loading…</div>';
@@ -236,15 +237,27 @@ function render(){
     const r = document.createElement('div');
     r.className = 'row';
     r.draggable = true;
-    r.ondragstart = () => { r.dataset.drag = i; r.classList.add('dragging'); };
-    r.ondragend = () => r.classList.remove('dragging');
+    r.ondragstart = (e) => {
+      dragIndex = i;
+      r.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(i)); // Firefox requires data to be set for drag to work at all
+    };
+    r.ondragend = () => {
+      r.classList.remove('dragging');
+      document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+      dragIndex = null;
+    };
     r.ondragover = e => { e.preventDefault(); r.classList.add('drag-over'); };
     r.ondragleave = () => r.classList.remove('drag-over');
-    r.ondrop = () => {
+    r.ondrop = e => {
+      e.preventDefault();
       r.classList.remove('drag-over');
-      const from = +r.dataset.drag;
-      const [moved] = config.splice(from, 1);
-      config.splice(i, 0, moved);
+      if (dragIndex === null || dragIndex === i) return;
+      const [moved] = config.splice(dragIndex, 1);
+      const target = dragIndex < i ? i - 1 : i; // dropping below the source: everything after `dragIndex` already shifted left by one
+      config.splice(target, 0, moved);
+      dragIndex = null;
       render();
     };
 

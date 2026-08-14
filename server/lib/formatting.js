@@ -38,15 +38,14 @@ const GRID_BORDER = { red: 0.85, green: 0.85, blue: 0.85 }
  *   stacking new banded ranges on top of the old ones).
  */
 export function buildFormattingRequests({
-  sheetId,
-  numColumns,
-  numRows,
-  hiddenColumnIndexes = [],
-  quantityColIndex = null,
-  priceColIndex = null,
-  existingBandedRangeIds = [],
-  columnWidths = [],
-  trimRowsTo = null
+  sheetId, numColumns, numRows,
+  hiddenColumnIndexes = [], quantityColIndex = null, priceColIndex = null,
+  existingBandedRangeIds = [], existingConditionalFormatRuleCount = 0,
+  columnWidths = [], trimRowsTo = null,
+  frozenColumnCount = 1,
+  subassemblyRowIndexes = [],
+  priorityColIndex = null,
+  checkboxColIndexes = [],
 }) {
   const requests = []
 
@@ -55,6 +54,9 @@ export function buildFormattingRequests({
   for (const bandedRangeId of existingBandedRangeIds) {
     requests.push({ deleteBanding: { bandedRangeId } })
   }
+
+  for (let i = existingConditionalFormatRuleCount - 1; i >= 0; i--) requests.push({ deleteConditionalFormatRule: { sheetId, index: i } })
+
 
   if (trimRowsTo != null) {
     requests.push({
@@ -68,8 +70,8 @@ export function buildFormattingRequests({
   // Freeze the header row.
   requests.push({
     updateSheetProperties: {
-      properties: { sheetId, gridProperties: { frozenRowCount: 1 } },
-      fields: 'gridProperties.frozenRowCount',
+      properties: { sheetId, gridProperties: { frozenRowCount: 1, frozenColumnCount } },
+      fields: 'gridProperties.frozenRowCount,gridProperties.frozenColumnCount',
     },
   })
 
@@ -183,6 +185,32 @@ export function buildFormattingRequests({
     })
   }
 
+    for (const rowIndex of subassemblyRowIndexes) {
+    requests.push({
+      repeatCell: {
+        range: { sheetId, startRowIndex: rowIndex + 1, endRowIndex: rowIndex + 2, startColumnIndex: 0, endColumnIndex: numColumns },
+        cell: { userEnteredFormat: { backgroundColor: { red: 0.94, green: 0.87, blue: 0.88 }, textFormat: { bold: true } } },
+        fields: 'userEnteredFormat(backgroundColor,textFormat.bold)',
+      },
+    })
+  }
+
+  if (priorityColIndex != null) {
+    const range = { sheetId, startRowIndex: 1, endRowIndex: numRows, startColumnIndex: priorityColIndex, endColumnIndex: priorityColIndex + 1 }
+    const rule = (text, color) => ({ addConditionalFormatRule: { rule: { ranges: [range], booleanRule: { condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: text }] }, format: { backgroundColor: color } } }, index: 0 } })
+    requests.push(rule('High', { red: 0.98, green: 0.85, blue: 0.85 }))
+    requests.push(rule('Medium', { red: 1, green: 0.95, blue: 0.8 }))
+    requests.push(rule('Low', { red: 0.85, green: 0.95, blue: 0.87 }))
+  }
+  for (const idx of checkboxColIndexes) {
+    requests.push({
+      addConditionalFormatRule: {
+        rule: { ranges: [{ sheetId, startRowIndex: 1, endRowIndex: numRows, startColumnIndex: idx, endColumnIndex: idx + 1 }], booleanRule: { condition: { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: '=TRUE' }] }, format: { backgroundColor: { red: 0.85, green: 0.95, blue: 0.87 } } } },
+        index: 0,
+      },
+    })
+  }
+
   return requests
 }
 
@@ -200,13 +228,21 @@ export async function getExistingBandedRangeIds(sheets, spreadsheetId, sheetId) 
   return (sheet?.bandedRanges ?? []).map((b) => b.bandedRangeId).filter((id) => id != null)
 }
 
+
+export async function getExistingConditionalFormatRuleCount(sheets, spreadsheetId, sheetId) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets(properties(sheetId),conditionalFormats)' })
+  const sheet = (meta.data.sheets ?? []).find((s) => s.properties?.sheetId === sheetId)
+  return (sheet?.conditionalFormats ?? []).length
+}
+
 /**
  * Applies the standard BOM formatting to a sheet. Safe to call after
  * every import/sync — clears old banding first so it doesn't stack.
  */
 export async function applyBomFormatting(sheets, spreadsheetId, sheetId, opts) {
   const existingBandedRangeIds = await getExistingBandedRangeIds(sheets, spreadsheetId, sheetId)
-  const requests = buildFormattingRequests({ sheetId, existingBandedRangeIds, ...opts })
+  const existingConditionalFormatRuleCount = await getExistingConditionalFormatRuleCount(sheets, spreadsheetId, sheetId)
+  const requests = buildFormattingRequests({ sheetId, existingBandedRangeIds, existingConditionalFormatRuleCount, ...opts })
   if (!requests.length) return
   await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } })
 }

@@ -15,7 +15,11 @@ sync.post('/', async (c) => {
   try {
     const ref = await getAssemblyRef(spreadsheetId, sheetName || '')
     if (!ref) return c.json({ error: 'No assembly is registered for this spreadsheet and tab. Run /api/import first.' }, 404)
-    const rows = await attachVendorSnapshots(annotateWithSourceKeys(await buildHierarchyRows(ref.documentId, ref.workspaceId, ref.elementId)))
+    // Same ordering as /api/import: vendor snapshot attached before the
+    // content hash is computed, so vendor-only changes still count as a
+    // row change on sync.
+    const builtRows = await buildHierarchyRows(ref.documentId, ref.workspaceId, ref.elementId)
+    const rows = annotateWithSourceKeys(await attachVendorSnapshots(builtRows))
     const result = await syncHierarchyBom(spreadsheetId, rows, { sheetName: sheetName || undefined })
     return c.json({ ok: true, ...result })
   } catch (err) {

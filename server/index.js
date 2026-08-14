@@ -16,6 +16,7 @@ import importRoute from './routes/import.js'
 import syncRoute from './routes/sync.js'
 import catalogRoute from './routes/catalog.js'
 import formatRoute from './routes/format.js'
+import configRoute from './routes/config.js'
 
 const app = new Hono()
 
@@ -32,6 +33,7 @@ app.route('/api/import', importRoute)
 app.route('/api/sync', syncRoute)
 app.route('/api/catalog', catalogRoute)
 app.route('/api/format', formatRoute)
+app.route('/api/config', configRoute)
 
 const port = parseInt(process.env.PORT, 10) || 8787
 

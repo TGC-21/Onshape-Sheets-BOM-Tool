@@ -43,7 +43,11 @@ importRoute.post('/', async (c) => {
       })
     }
 
-    const annotatedRows = await attachVendorSnapshots(annotateWithSourceKeys(rows))
+    // Vendor snapshot is attached BEFORE the source-key/content-hash pass
+    // so contentHash covers vendor fields too — otherwise a price change
+    // alone wouldn't mark a row as changed on the next sync.
+    const rowsWithVendor = await attachVendorSnapshots(rows)
+    const annotatedRows = annotateWithSourceKeys(rowsWithVendor)
     const writeResult = await writeHierarchyBom(spreadsheetId, annotatedRows, { sheetName })
     await saveAssemblyRef(spreadsheetId, writeResult.sheetName, { documentId, workspaceId, elementId })
     const subassemblyCount = rows.filter((r) => r.isSubassembly).length

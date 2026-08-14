@@ -30,7 +30,10 @@ export function annotateWithSourceKeys(rows) {
     const parent = r.parentRowId ? rows.find((candidate) => candidate.rowId === r.parentRowId) : null
     const parentSourceKey = parent ? keyByRowId.get(parent.rowId) : null
     const parentLabel = parent ? `${parent.partName}${parent.partNumber ? ` (${parent.partNumber})` : ''}` : ''
-    const hash = contentHash([r.partName, r.partNumber, r.quantity, r.level, parentSourceKey])
+    // vendorSnapshot included so a vendor-only change (price, availability,
+    // a different matched listing) marks the row changed on sync, not just
+    // Onshape-sourced field changes.
+    const hash = contentHash([r.partName, r.partNumber, r.quantity, r.level, parentSourceKey, r.vendorSnapshot ?? ''])
     return { ...r, sourceKey, parentSourceKey, parentLabel, contentHash: hash }
   })
 }

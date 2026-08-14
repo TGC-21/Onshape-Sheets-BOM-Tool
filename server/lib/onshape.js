@@ -16,6 +16,7 @@ const ONSHAPE_BASE = 'https://cad.onshape.com/api/v6'
 // out across sibling subassemblies. Defined here so every module that
 // eventually needs it agrees on one constant.
 export const MAX_ONSHAPE_CONCURRENCY = 5
+export const MAX_TOTAL_BOM_FETCHES = 500
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -502,6 +503,17 @@ export async function buildHierarchyRows(documentId, workspaceId, elementId, wvm
   const rootOwnerId = await fetchDocumentOwnerId(documentId)
   const resolveCache = new Map()
   let rowCounter = 0
+  let fetchCount = 0
+
+
+  function trackFetch() {
+    if (++fetchCount > MAX_TOTAL_BOM_FETCHES) {
+      throw new Error(
+        `BOM import aborted after ${MAX_TOTAL_BOM_FETCHES} Onshape API calls for one assembly tree. ` +
+        `This usually means a very large/deep BOM or an unexpectedly wide subassembly fan-out — check the assembly structure.`
+      )
+    }
+  }
  
   // Runs `items` through `worker` with at most MAX_ONSHAPE_CONCURRENCY
   // in flight at once. `worker` returns a value per item; results are
@@ -564,3 +576,5 @@ export async function buildHierarchyRows(documentId, workspaceId, elementId, wvm
  
   return walk(documentId, workspaceId, elementId, wvmType, 0, null)
 }
+
+

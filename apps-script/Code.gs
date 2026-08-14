@@ -1,7 +1,6 @@
 // Set this once when deploying the container-bound script.
 const BACKEND_URL = 'https://YOUR-BOM-BACKEND.example.com';
 const BACKEND_API_TOKEN = 'YOUR-BOM-BACKEND-TOKEN';
-// hello
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('Onshape BOM')
     .addItem('Import…', 'showImportSidebar').addItem('Manage vendor listings', 'showVendorCatalog').addItem('Configure columns…', 'showColumnConfig').addItem('Sync now', 'syncNow').addItem('Format sheet', 'formatSheetNow')
@@ -13,10 +12,17 @@ function showImportSidebar() { SpreadsheetApp.getUi().showSidebar(HtmlService.cr
 function showVendorCatalog() { SpreadsheetApp.getUi().showSidebar(HtmlService.createHtmlOutputFromFile('vendor-catalog').setTitle('Vendor Listings')); }
 function showColumnConfig() { SpreadsheetApp.getUi().showSidebar(HtmlService.createHtmlOutputFromFile('column-config').setTitle('Configure BOM Columns')); }
 function installTriggers() { ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'handleVendorSelectionEdit').forEach(t => ScriptApp.deleteTrigger(t)); ScriptApp.newTrigger('handleVendorSelectionEdit').forSpreadsheet(SpreadsheetApp.getActive()).onEdit().create(); }
-function defaultColumnConfig_() { return [{id:'name',label:'Name',source:'onshape',type:'text',editable:false},{id:'partNumber',label:'Part Number',source:'onshape',type:'text',editable:false},{id:'quantity',label:'Quantity',source:'onshape',type:'number',editable:false},{id:'level',label:'Level',source:'onshape',type:'number',editable:false},{id:'parent',label:'Parent',source:'onshape',type:'text',editable:false},{id:'priority',label:'Priority',source:'user',type:'dropdown',options:['Low','Medium','High'],editable:true},{id:'owner',label:'Owner',source:'user',type:'dropdown',options:[],editable:true},{id:'purchased',label:'Purchased',source:'user',type:'checkbox',editable:true},{id:'inInventory',label:'In Inventory?',source:'user',type:'checkbox',editable:true},{id:'vendor',label:'Vendor',source:'vendor',type:'text',editable:false},{id:'vendorPartNumber',label:'Vendor Part Number',source:'vendor',type:'text',editable:false},{id:'purchaseUrl',label:'Purchase URL',source:'vendor',type:'url',editable:false},{id:'price',label:'Price',source:'vendor',type:'number',editable:false},{id:'availability',label:'Availability',source:'vendor',type:'text',editable:false}]; }
+function defaultColumnConfig_() { return [{id:'name',label:'Name',source:'onshape',type:'text',editable:false},{id:'partNumber',label:'Part Number',source:'onshape',type:'text',editable:false},{id:'quantity',label:'Quantity',source:'onshape',type:'number',editable:false},{id:'level',label:'Level',source:'onshape',type:'number',editable:false},{id:'parent',label:'Parent',source:'onshape',type:'text',editable:false},{id:'priority',label:'Priority',source:'user',type:'dropdown',options:['Low','Medium','High'],editable:true},{id:'purchased',label:'Purchased',source:'user',type:'checkbox',editable:true},{id:'inInventory',label:'In Inventory?',source:'user',type:'checkbox',editable:true},{id:'vendor',label:'Vendor',source:'vendor',type:'text',editable:false},{id:'vendorPartNumber',label:'Vendor Part Number',source:'vendor',type:'text',editable:false},{id:'purchaseUrl',label:'Purchase URL',source:'vendor',type:'url',editable:false},{id:'price',label:'Price',source:'vendor',type:'number',editable:false}]; }
 function configSheet_() { const ss=SpreadsheetApp.getActive(); let sheet=ss.getSheetByName('Config'); if(!sheet) { sheet=ss.insertSheet('Config'); sheet.hideSheet(); } return sheet; }
 function getColumnConfig() { const sheet=configSheet_(); const value=sheet.getRange('A1').getValue(); return value ? JSON.parse(value) : defaultColumnConfig_(); }
-function saveColumnConfig(config) { config=config||defaultColumnConfig_(); configSheet_().getRange('A1').setValue(JSON.stringify(config)); applyColumnOrder_(config); applyColumnValidation_(); return true; }
+function saveColumnConfig(config) {
+  config = config || defaultColumnConfig_();
+  configSheet_().getRange('A1').setValue(JSON.stringify(config));
+  try { backendRequest_('post', '/api/config/invalidate', { spreadsheetId: SpreadsheetApp.getActive().getId() }); } catch (_) {}
+  applyColumnOrder_(config);
+  applyColumnValidation_();
+  return true;
+}
 function applyColumnOrder_(config) { const sheet=SpreadsheetApp.getActiveSheet(); const active=config.filter(c=>c.enabled!==false); const max=Math.max(sheet.getLastColumn(), active.length+1); for(let i=0;i<active.length;i++){const wanted=active[i].label;const headers=sheet.getRange(1,1,1,max).getValues()[0];const current=headers.indexOf(wanted)+1;const target=i+2;if(current>0&&current!==target)sheet.moveColumns(sheet.getRange(1,current,sheet.getMaxRows(),1),target);} }
 function applyColumnValidation_() {
   const sheet = SpreadsheetApp.getActiveSheet();

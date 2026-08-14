@@ -5,29 +5,26 @@
 // later Config-tab reader can replace it without touching any other file.
 //
 // Row layout (1-indexed, header row is row 1):
-//   A: (unused / reserved, e.g. could hold a row number later)
-//   B: Name
-//   C: Part Number
-//   D: Quantity
-//   E: Level        (Phase 3 — hierarchy depth; blank in Phase 2)
-//   F: Parent        (Phase 3 — parent identity key; blank in Phase 2)
-//   G: Priority      (user-owned)
-//   H: Owner         (user-owned)
+//   A Name
+//   B: Part Number
+//   C: Quantity
+//   D: Level        (Phase 3 — hierarchy depth; blank in Phase 2)
+//   E: Parent        (Phase 3 — parent identity key; blank in Phase 2)
+//   F: Priority      (user-owned)
 //   ...              (hidden meta columns further right)
 
 export const ONSHAPE_COLUMNS = {
-  name: 'B',
-  partNumber: 'C',
-  quantity: 'D',
-  level: 'E',
-  parent: 'F',
+  name: 'A',
+  partNumber: 'B',
+  quantity: 'C',
+  level: 'D',
+  parent: 'E',
 }
 
 export const USER_COLUMNS = {
-  priority: 'G',
-  owner: 'H',
+  priority: 'F',
 }
-export const VENDOR_COLUMNS = { vendor: 'I', vendorPartNumber: 'J', purchaseUrl: 'K', price: 'L', availability: 'M' }
+export const VENDOR_COLUMNS = { vendor: 'G', vendorPartNumber: 'H', purchaseUrl: 'I', price: 'J', availability: 'K' }
 
 // Hidden helper columns reserved for re-import diffing (Phase 4). The
 // column letters are fixed now so Phase 4 doesn't need a layout
@@ -48,7 +45,6 @@ const HEADER_LABELS = {
   [ONSHAPE_COLUMNS.level]: 'Level',
   [ONSHAPE_COLUMNS.parent]: 'Parent',
   [USER_COLUMNS.priority]: 'Priority',
-  [USER_COLUMNS.owner]: 'Owner',
   [META_COLUMNS.sourceKey]: 'Source Key (hidden — do not edit)',
   [META_COLUMNS.contentHash]: 'Content Hash (hidden — do not edit)',
   [VENDOR_COLUMNS.vendor]: 'Vendor',

@@ -11,11 +11,9 @@
 import { google } from 'googleapis'
 import fs from 'node:fs'
 import { buildHeaderRow, columnLetterToIndex, ONSHAPE_COLUMNS, META_COLUMNS, VENDOR_COLUMNS } from './columnMap.js'
-import { DEFAULT_COLUMN_CONFIG } from './columnConfig.js'
 import { applyBomFormatting } from './formatting.js'
 
-const LEGACY_LAYOUT = { name: 'B', partNumber: 'C', quantity: 'D', level: 'E', parent: 'F', priority: 'G', owner: 'H', vendor: 'I', vendorPartNumber: 'J', purchaseUrl: 'K', price: 'L', availability: 'M', sourceKey: 'Z', contentHash: 'AA', listingId: 'AB', listingSnapshot: 'AC' }
-const labelFor = (id, fallback) => DEFAULT_COLUMN_CONFIG.find((c) => c.id === id)?.label || fallback
+const LEGACY_LAYOUT = { name: 'B', partNumber: 'C', quantity: 'D', level: 'E', parent: 'F', priority: 'G', vendor: 'H', vendorPartNumber: 'I', purchaseUrl: 'J', price: 'K', availability: 'L', sourceKey: 'Z', contentHash: 'AA', listingId: 'AB', listingSnapshot: 'AC' }
 // Minimum pixel widths, keyed by the same column ids used in `layout`.
 // autoResizeDimensions alone tends to clip these (esp. Vendor Part
 // Number / Purchase URL headers, and Name for longer part names).
@@ -23,16 +21,34 @@ const MIN_COLUMN_WIDTHS = {
   name: 220, partNumber: 150, quantity: 80, level: 60, parent: 170,
   vendor: 150, vendorPartNumber: 170, purchaseUrl: 220, price: 90, availability: 130,
 }
+
 const vendorLabel = (v) => (v?.vendorName && v?.vendorPartNumber) ? `${v.vendorName} — ${v.vendorPartNumber}` : (v?.vendorName ?? '')
 
-function buildColumnWidthRequests(layout) {
-  return Object.entries(MIN_COLUMN_WIDTHS)
-    .filter(([id]) => layout[id] != null || LEGACY_LAYOUT[id] != null)
-    .map(([id, pixelSize]) => ({ index: indexFor(layout, id, LEGACY_LAYOUT[id]) - 1, pixelSize }))
+const columnLayoutCache = new Map() // spreadsheetId -> { layout, labels, cachedAt }
+const COLUMN_LAYOUT_CACHE_TTL_MS = 5 * 60 * 1000
+
+export function invalidateColumnLayoutCache(spreadsheetId) {
+  columnLayoutCache.delete(spreadsheetId)
 }
 
-
 async function resolveColumnLayout(sheets, spreadsheetId) {
+  const cached = columnLayoutCache.get(spreadsheetId)
+  if (cached && Date.now() - cached.cachedAt < COLUMN_LAYOUT_CACHE_TTL_MS) return cached
+  const resolved = await resolveColumnLayoutUncached(sheets, spreadsheetId)
+  const entry = { ...resolved, cachedAt: Date.now() }
+  columnLayoutCache.set(spreadsheetId, entry)
+  return entry
+}
+
+// `availability` is never a user-configurable column (not in
+// DEFAULT_COLUMN_CONFIG / defaultColumnConfig_), so it must be
+// auto-reserved after the Config tab's columns too, same as the meta
+// columns — otherwise it silently falls back to LEGACY_LAYOUT's fixed
+// letter, which collides with whatever real config column lands there
+// once the Config tab has enough entries (this was actually happening:
+// the 12-entry default config puts `price` at the same column that
+// availability's static fallback pointed to).
+async function resolveColumnLayoutUncached(sheets, spreadsheetId) {
   try {
     const result = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Config!A1' })
     const config = JSON.parse(result.data.values?.[0]?.[0] || '')
@@ -41,15 +57,17 @@ async function resolveColumnLayout(sheets, spreadsheetId) {
     const labels = {}
     config.filter((c) => c.enabled !== false).forEach((c, index) => { layout[c.id] = index + 2; labels[c.id] = c.label })
     let next = Math.max(...Object.values(layout), 1) + 1
-    for (const id of ['sourceKey', 'contentHash', 'listingId', 'listingSnapshot']) {
+    for (const id of ['availability', 'sourceKey', 'contentHash', 'listingId', 'listingSnapshot']) {
       if (!layout[id]) layout[id] = next++
     }
-   // Reserve meta columns AFTER whatever the Config tab actually uses,
-    // instead of fixed letters (Z/AA/AB/AC) that a wide custom config
-    // can grow past and collide with.
-
     return { layout, labels }
   } catch { return { layout: LEGACY_LAYOUT, labels: null } }
+}
+
+function buildColumnWidthRequests(layout) {
+  return Object.entries(MIN_COLUMN_WIDTHS)
+    .filter(([id]) => layout[id] != null || LEGACY_LAYOUT[id] != null)
+    .map(([id, pixelSize]) => ({ index: indexFor(layout, id, LEGACY_LAYOUT[id]) - 1, pixelSize }))
 }
 
 function indexFor(layout, id, fallbackLetter) { return layout[id] ?? columnLetterToIndex(fallbackLetter) }
@@ -297,7 +315,8 @@ export async function writeHierarchyBom(spreadsheetId, rows, { sheetName } = {})
   
   const values = rows.map((r) => {
     const row = new Array(header.length).fill('')
-    row[nameIdx] = r.isSubassembly ? `${r.partName} (assembly)` : r.partName
+    const indent = '   '.repeat(r.level) // visual nesting; doesn't touch r.partName used by contentHash elsewhere
+    row[nameIdx] = indent + (r.isSubassembly ? `${r.partName} (assembly)` : r.partName)
     row[partNumberIdx] = r.partNumber
     row[quantityIdx] = r.quantity
     row[levelIdx] = r.level
@@ -312,6 +331,8 @@ export async function writeHierarchyBom(spreadsheetId, rows, { sheetName } = {})
      row[availabilityIdx] = v.active === false ? 'Unavailable' : (v.availability ?? ''); row[listingIdIdx] = v.id;
      row[snapshotIdx] = r.vendorSnapshot 
     }
+
+
     return row
   })
 
@@ -337,6 +358,8 @@ export async function writeHierarchyBom(spreadsheetId, rows, { sheetName } = {})
     await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } })
   }
 
+  const purchasedIdx = indexFor(layout, 'purchased', 'I') - 1 // adjust fallback letter to match your Config tab
+  const inInventoryIdx = indexFor(layout, 'inInventory', 'J') - 1
   await applyBomFormatting(sheets, spreadsheetId, sheetId, {
     numColumns: header.length,
     numRows: values.length + 1,
@@ -345,6 +368,10 @@ export async function writeHierarchyBom(spreadsheetId, rows, { sheetName } = {})
     priceColIndex: priceIdx >= 0 ? priceIdx : null,
     columnWidths: buildColumnWidthRequests(layout),
     trimRowsTo: values.length + 1,
+    frozenColumnCount: nameIdx + 1,
+    subassemblyRowIndexes: rows.map((r, i) => (r.isSubassembly ? i : -1)).filter((i) => i >= 0),
+    priorityColIndex: indexFor(layout, 'priority', ONSHAPE_COLUMNS ? 'G' : 'G') - 1,
+    checkboxColIndexes: [purchasedIdx, inInventoryIdx].filter((i) => i >= 0),
   })
 
   return { sheetName: title, rowsWritten: values.length, groupsCreated: groupRanges.length }
@@ -391,7 +418,7 @@ export async function syncHierarchyBom(spreadsheetId, rows, { sheetName } = {}) 
   const sheets = await getSheetsClient()
   const title = await resolveSheetTitle(sheets, spreadsheetId, sheetName)
   const sheetId = await getSheetIdByTitle(sheets, spreadsheetId, title)
-  const layout = await resolveColumnLayout(sheets, spreadsheetId)
+  const { layout } = await resolveColumnLayout(sheets, spreadsheetId)
   const maxColumn = Math.max(...Object.values(layout), columnLetterToIndex(META_COLUMNS.listingSnapshot))
   const read = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${title}!A:${columnIndexToLetter(maxColumn)}` })
   const values = read.data.values ?? []
@@ -417,10 +444,13 @@ export async function syncHierarchyBom(spreadsheetId, rows, { sheetName } = {}) 
   const urlCol = indexFor(layout, 'purchaseUrl', VENDOR_COLUMNS.purchaseUrl) - 1
   const priceCol = indexFor(layout, 'price', VENDOR_COLUMNS.price) - 1
   const availabilityCol = indexFor(layout, 'availability', VENDOR_COLUMNS.availability) - 1
+
   const cellsFor = (r) => { 
     const v = r.vendorListing;
+    const indent = '   '.repeat(r.level)
     return [
-      [r.isSubassembly ? `${r.partName} (assembly)` : r.partName, 
+      [r.isSubassembly ? `${r.partName} (assembly)` : 
+        indent + (r.isSubassembly ? `${r.partName} (assembly)` : r.partName),
         r.partNumber, 
         r.quantity, 
         r.level, 
