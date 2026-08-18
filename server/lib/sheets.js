@@ -14,6 +14,17 @@ import { buildHeaderRow, columnLetterToIndex, ONSHAPE_COLUMNS, META_COLUMNS, VEN
 import { applyBomFormatting } from './formatting.js'
 
 const LEGACY_LAYOUT = { name: 'B', partNumber: 'C', quantity: 'D', level: 'E', parent: 'F', priority: 'G', vendor: 'H', vendorPartNumber: 'I', purchaseUrl: 'J', price: 'K', availability: 'L', sourceKey: 'Z', contentHash: 'AA', listingId: 'AB', listingSnapshot: 'AC' }
+// LEGACY_LAYOUT (above) is letter-keyed — it's also used elsewhere as a
+// fallback *letter* (indexFor, buildColumnWidthRequests). But `layout`
+// objects everywhere else in this file (from resolveColumnLayout) are
+// expected to hold 1-indexed column *numbers*, not letters. Using
+// LEGACY_LAYOUT directly as a `layout` silently produces NaN throughout
+// (Math.max(...['B','C',...]) === NaN, 'B' - 1 === NaN), which eventually
+// surfaces as `RangeError: Invalid array length` from `new Array(NaN)`.
+// This indexed version is what should be handed out as a `layout`.
+const LEGACY_LAYOUT_INDEXED = Object.fromEntries(
+  Object.entries(LEGACY_LAYOUT).map(([id, letter]) => [id, columnLetterToIndex(letter)])
+)
 // Minimum pixel widths, keyed by the same column ids used in `layout`.
 // autoResizeDimensions alone tends to clip these (esp. Vendor Part
 // Number / Purchase URL headers, and Name for longer part names).
@@ -52,7 +63,11 @@ async function resolveColumnLayoutUncached(sheets, spreadsheetId) {
   try {
     const result = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Config!A1' })
     const config = JSON.parse(result.data.values?.[0]?.[0] || '')
-    if (!Array.isArray(config) || !config.length) return { layout: LEGACY_LAYOUT, labels: null }
+    // No Config tab yet, or it's empty: fall back to the indexed legacy
+    // layout rather than the raw letter-keyed LEGACY_LAYOUT, so a
+    // brand-new/unconfigured sheet still imports correctly instead of
+    // throwing. This is the common first-import case, not an edge case.
+    if (!Array.isArray(config) || !config.length) return { layout: LEGACY_LAYOUT_INDEXED, labels: null }
     const layout = {}
     const labels = {}
     config.filter((c) => c.enabled !== false).forEach((c, index) => { layout[c.id] = index + 2; labels[c.id] = c.label })
@@ -61,7 +76,7 @@ async function resolveColumnLayoutUncached(sheets, spreadsheetId) {
       if (!layout[id]) layout[id] = next++
     }
     return { layout, labels }
-  } catch { return { layout: LEGACY_LAYOUT, labels: null } }
+  } catch { return { layout: LEGACY_LAYOUT_INDEXED, labels: null } }
 }
 
 function buildColumnWidthRequests(layout) {
@@ -72,6 +87,16 @@ function buildColumnWidthRequests(layout) {
 
 function indexFor(layout, id, fallbackLetter) { return layout[id] ?? columnLetterToIndex(fallbackLetter) }
 function columnIndexToLetter(index) { let result=''; while(index>0){const remainder=(index-1)%26;result=String.fromCharCode(65+remainder)+result;index=Math.floor((index-1)/26)} return result }
+
+// Defensive: compute the header/data width from a layout + a minimum
+// required column, tolerating non-numeric or missing values instead of
+// propagating a NaN into `new Array(...)`. A malformed layout should
+// fall back to something sane (the minimum required column) rather than
+// crash the import.
+function computeMaxColumn(layout, minColumn) {
+  const numericValues = Object.values(layout).filter((v) => Number.isFinite(v))
+  return Math.max(minColumn, ...numericValues)
+}
 
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
@@ -294,7 +319,7 @@ export async function writeHierarchyBom(spreadsheetId, rows, { sheetName } = {})
   const availabilityIdx = indexFor(layout, 'availability', VENDOR_COLUMNS.availability) - 1
   const listingIdIdx = indexFor(layout, 'listingId', META_COLUMNS.listingId) - 1
   const snapshotIdx = indexFor(layout, 'listingSnapshot', META_COLUMNS.listingSnapshot) - 1
-  const header = new Array(Math.max(...Object.values(layout), columnLetterToIndex(META_COLUMNS.listingSnapshot))).fill('')
+  const header = new Array(computeMaxColumn(layout, columnLetterToIndex(META_COLUMNS.listingSnapshot))).fill('')
   const metaLabels = { 
     sourceKey: 'Source Key (hidden — do not edit)', 
     contentHash: 'Content Hash (hidden — do not edit)', 
@@ -388,7 +413,7 @@ export async function formatBomSheet(spreadsheetId, { sheetName } = {}) {
   const title = await resolveSheetTitle(sheets, spreadsheetId, sheetName)
   const sheetId = await getSheetIdByTitle(sheets, spreadsheetId, title)
   const { layout, labels } = await resolveColumnLayout(sheets, spreadsheetId)
-  const maxColumn = Math.max(...Object.values(layout), columnLetterToIndex(META_COLUMNS.listingSnapshot))
+  const maxColumn = computeMaxColumn(layout, columnLetterToIndex(META_COLUMNS.listingSnapshot))
 
   const read = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${title}!A:${columnIndexToLetter(maxColumn)}` })
   const numRows = Math.max(read.data.values?.length ?? 1, 1)
@@ -419,7 +444,7 @@ export async function syncHierarchyBom(spreadsheetId, rows, { sheetName } = {}) 
   const title = await resolveSheetTitle(sheets, spreadsheetId, sheetName)
   const sheetId = await getSheetIdByTitle(sheets, spreadsheetId, title)
   const { layout } = await resolveColumnLayout(sheets, spreadsheetId)
-  const maxColumn = Math.max(...Object.values(layout), columnLetterToIndex(META_COLUMNS.listingSnapshot))
+  const maxColumn = computeMaxColumn(layout, columnLetterToIndex(META_COLUMNS.listingSnapshot))
   const read = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${title}!A:${columnIndexToLetter(maxColumn)}` })
   const values = read.data.values ?? []
   const existing = new Map()
